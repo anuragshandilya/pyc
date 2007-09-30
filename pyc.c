@@ -20,7 +20,9 @@
 
 #include <Python.h>
 #include <clamav.h>
+#include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 
 #ifndef MAX_PATH
 #define MAX_PATH 1024
@@ -28,6 +30,10 @@
 
 #ifndef S_ISLNK
 #define S_ISLNK(m) (0)
+#endif
+
+#ifndef O_BINARY
+#define O_BINARY (0)
 #endif
 
 #define PYC_VERSION "1.0"
@@ -197,13 +203,44 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
     return Py_None;
 }
 
-static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
+static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 {
     unsigned int ret = 0;
     unsigned long scanned = 0;
     const char *virname = NULL;
+    int fd = -1;
+
+    if (!PyArg_ParseTuple(args, "i", &fd))
+    {
+        PyErr_SetString(PycError, "Invalid argument");
+        return NULL;
+    }
+
+    if ((ret = pyci_checkDB()))
+    {
+        PyErr_SetString(PycError, cl_strerror(ret));
+        return NULL;
+    }
+
+    Py_BEGIN_ALLOW_THREADS;
+    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, CL_SCAN_STDOPT);
+    Py_END_ALLOW_THREADS;
+
+    switch (ret)
+    {
+        case CL_CLEAN: return Py_BuildValue("(O,s)", Py_False, "CLEAN");
+        case CL_VIRUS: return Py_BuildValue("(O,s)", Py_True,  virname);
+    }
+
+    PyErr_SetString(PycError, cl_strerror(ret));
+    return NULL;
+}
+
+static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
+{
     char *filename = NULL;
     struct stat info;
+    int fd = -1;
 
     if (!PyArg_ParseTuple(args, "s", &filename))
     {
@@ -223,23 +260,13 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if ((ret = pyci_checkDB()))
+    if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0)
     {
-        PyErr_SetString(PycError, cl_strerror(ret));
+        PyErr_SetFromErrno(PycError);
         return NULL;
     }
 
-    Py_BEGIN_ALLOW_THREADS
-    ret = cl_scanfile(filename, &virname, &scanned, pyci_root, &pyci_limits, CL_SCAN_STDOPT);
-    Py_END_ALLOW_THREADS
-
-    switch (ret)
-    {
-        case CL_CLEAN: return Py_BuildValue("(O,s)", Py_False, "CLEAN");
-        case CL_VIRUS: return Py_BuildValue("(O,s)", Py_True,  virname);
-    }
-    PyErr_SetString(PycError, cl_strerror(ret));
-    return NULL;
+    return pyc_scanDesc(self, Py_BuildValue("(i)", fd));
 }
 
 static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
@@ -256,6 +283,7 @@ static PyMethodDef pycMethods[] =
     { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path of virus database"          },
     { "loadDB",      pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
     { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
+    { "scanDesc",    pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
     { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
 
     { NULL, NULL, 0, NULL }
