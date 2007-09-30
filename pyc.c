@@ -129,7 +129,7 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 {
     const char *version = NULL;
 
-    if (!(vmain && vdaily))
+    if (!(pyci_root && vmain && vdaily))
     {
         PyErr_SetString(PycError, "No database loaded");
         return NULL;
