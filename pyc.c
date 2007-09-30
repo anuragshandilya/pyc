@@ -238,6 +238,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 
 static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 {
+    PyObject *result = NULL;
     char *filename = NULL;
     struct stat info;
     int fd = -1;
@@ -266,7 +267,9 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    return pyc_scanDesc(self, Py_BuildValue("(i)", fd));
+    result = pyc_scanDesc(self, Py_BuildValue("(i)", fd));
+    close(fd);
+    return result;
 }
 
 static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
