@@ -113,7 +113,7 @@ static int pyci_loadDB(void)
     return ret;
 }
 
-static int pyci_reloadDB(void)
+static int pyci_checkDB(void)
 {
     unsigned int dbmain = 0, dbdaily = 0;
     if (!pyci_root) return pyci_loadDB();
@@ -218,7 +218,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if ((ret = pyci_reloadDB()))
+    if ((ret = pyci_checkDB()))
     {
         PyErr_SetString(PycError, cl_strerror(ret));
         return NULL;
