@@ -282,8 +282,8 @@ static PyMethodDef pycMethods[] =
     { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path of virus database"          },
     { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path of virus database"          },
     { "loadDB",      pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
-    { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
     { "scanDesc",    pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
+    { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
     { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
 
     { NULL, NULL, 0, NULL }
