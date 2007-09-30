@@ -231,7 +231,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         case CL_CLEAN: return Py_BuildValue("(O,s)", Py_False, "CLEAN");
         case CL_VIRUS: return Py_BuildValue("(O,s)", Py_True,  virname);
     }
-    PyErr_SetString(PycError,  cl_strerror(ret));
+    PyErr_SetString(PycError, cl_strerror(ret));
     return NULL;
 }
 
@@ -244,12 +244,13 @@ static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
 
 static PyMethodDef pycMethods[] =
 {
-    { "getVersions", pyc_getVersions, METH_VARARGS, "Get clamav and database versions" },
-    { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path of virus database"       },
-    { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path of virus database"       },
+    { "getVersions", pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
+    { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path of virus database"          },
+    { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path of virus database"          },
     { "loadDB",      pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
-    { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                      },
-    { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"  },
+    { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
+    { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
+
     { NULL, NULL, 0, NULL }
 };
 
