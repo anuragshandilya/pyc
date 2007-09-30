@@ -36,7 +36,7 @@ static unsigned int sigs = 0;
 static unsigned int vmain = 0, vdaily = 0;
 static char dbPath[MAX_PATH + 1] = "";
 
-static struct cl_node *pyci_root = NULL;
+static struct cl_node  *pyci_root = NULL;
 static struct cl_limits pyci_limits;
 
 static PyObject *PycError;
