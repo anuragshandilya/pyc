@@ -177,7 +177,7 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
             pyci_setDBPath(PyString_AsString(result));
         else
         {
-            PyErr_SetString(PyExc_TypeError, "DB path must be a String");
+            PyErr_SetString(PyExc_TypeError, "Database path must be a String");
             return NULL;
         }
     }
