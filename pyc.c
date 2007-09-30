@@ -224,7 +224,9 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
+    Py_BEGIN_ALLOW_THREADS
     ret = cl_scanfile(filename, &virname, &scanned, pyci_root, &pyci_limits, CL_SCAN_STDOPT);
+    Py_END_ALLOW_THREADS
 
     switch (ret)
     {
