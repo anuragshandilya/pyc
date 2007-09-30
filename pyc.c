@@ -123,6 +123,11 @@ static int pyci_checkDB(void)
     return 0;
 }
 
+static void pyci_cleanup(void)
+{
+    if (pyci_root) cl_free(pyci_root);
+}
+
 /* ------------- */
 
 static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
@@ -280,6 +285,8 @@ initpyc(void)
     pyci_limits.maxreclevel = 5;            /* maximal recursion level */
     pyci_limits.maxratio = 200;             /* maximal compression ratio */
     pyci_limits.archivememlim = 0;          /* disable memory limit for bzip2 scanner */
+
+    atexit(pyci_cleanup); /* I need to free pyci_root */
 }
 
 int main(int argc, char *argv[])
