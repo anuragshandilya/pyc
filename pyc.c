@@ -35,8 +35,9 @@
 static unsigned int sigs = 0;
 static unsigned int vmain = 0, vdaily = 0;
 static char dbPath[MAX_PATH + 1] = "";
-static struct cl_node *cl_root = NULL;
-static struct cl_limits limits;
+
+static struct cl_node *pyci_root = NULL;
+static struct cl_limits pyci_limits;
 
 static PyObject *PycError;
 static PyGILState_STATE gstate;
@@ -88,20 +89,20 @@ static int pyci_loadDB(void)
 
     vmain = vdaily = sigs = 0;
 
-    if (cl_root)
+    if (pyci_root)
     {
-        cl_free(cl_root);
-        cl_root = NULL;
+        cl_free(pyci_root);
+        pyci_root = NULL;
     }
 
-    if ((ret = cl_load(dbPath, &cl_root, &sigs, CL_DB_STDOPT)))
+    if ((ret = cl_load(dbPath, &pyci_root, &sigs, CL_DB_STDOPT)))
         goto cleanup;
 
     /* build the final tree */
-    if ((ret = cl_build(cl_root)))
+    if ((ret = cl_build(pyci_root)))
     {
         /* free the partial tree */
-        cl_free(cl_root);
+        cl_free(pyci_root);
         goto cleanup;
     }
 
@@ -115,7 +116,7 @@ static int pyci_loadDB(void)
 static int pyci_reloadDB(void)
 {
     unsigned int dbmain = 0, dbdaily = 0;
-    if (!cl_root) return pyci_loadDB();
+    if (!pyci_root) return pyci_loadDB();
     pyci_getVersions(&dbmain, &dbdaily);
     if ((dbmain != vmain) || (dbdaily != vdaily))
         return pyci_loadDB();
@@ -223,7 +224,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    ret = cl_scanfile(filename, &virname, &scanned, cl_root, &limits, CL_SCAN_STDOPT);
+    ret = cl_scanfile(filename, &virname, &scanned, pyci_root, &pyci_limits, CL_SCAN_STDOPT);
 
     switch (ret)
     {
@@ -270,12 +271,12 @@ initpyc(void)
     dbPath[MAX_PATH] = 0;
 
     /* set up archive limits */
-    memset(&limits, 0, sizeof(struct cl_limits));
-    limits.maxfiles = 1000;            /* max files */
-    limits.maxfilesize = 10 * 1048576; /* maximal archived file size == 10 Mb */
-    limits.maxreclevel = 5;            /* maximal recursion level */
-    limits.maxratio = 200;             /* maximal compression ratio */
-    limits.archivememlim = 0;          /* disable memory limit for bzip2 scanner */
+    memset(&pyci_limits, 0, sizeof(pyci_limits));
+    pyci_limits.maxfiles = 1000;            /* max files */
+    pyci_limits.maxfilesize = 10 * 1048576; /* maximal archived file size == 10 Mb */
+    pyci_limits.maxreclevel = 5;            /* maximal recursion level */
+    pyci_limits.maxratio = 200;             /* maximal compression ratio */
+    pyci_limits.archivememlim = 0;          /* disable memory limit for bzip2 scanner */
 }
 
 int main(int argc, char *argv[])
