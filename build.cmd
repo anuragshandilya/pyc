@@ -1,6 +1,6 @@
 @echo off
 
-set PYCLAMAV_DEVROOT=J:\Devel\Clamav\native-clamav\clamav-release
+set CLAMAV_DEVROOT=J:\Devel\Clamav\native-clamav\clamav-release
 
 if "%1"=="release" goto release
 if "%1"=="debug" goto debug
@@ -9,13 +9,13 @@ goto usage
 
 :release
 rd /s/q build
-set DLL=%PYCLAMAV_DEVROOT%\contrib\msvc\Release\libclamav.dll
+set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Release\libclamav.dll
 goto build
 
 :debug
 rd /s/q build
-set DLL=%PYCLAMAV_DEVROOT%\contrib\msvc\Debug\libclamavd.dll
-set PYCLAMAV_DEBUG=yes
+set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Debug\libclamavd.dll
+set CLAMAV_DEBUG=yes
 goto build
 
 :clean
