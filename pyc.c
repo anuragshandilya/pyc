@@ -102,13 +102,17 @@ static int pyci_loadDB(void)
     }
 
     if ((ret = cl_load(dbPath, &pyci_root, &sigs, CL_DB_STDOPT)))
+    {
+        pyci_root = NULL;
         goto cleanup;
+    }
 
     /* build the final tree */
     if ((ret = cl_build(pyci_root)))
     {
         /* free the partial tree */
         cl_free(pyci_root);
+        pyci_root = NULL;
         goto cleanup;
     }
 
