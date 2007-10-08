@@ -1,5 +1,7 @@
 @echo off
 
+setlocal
+
 set CLAMAV_DEVROOT=J:\Devel\Clamav\native-clamav\clamav-release
 
 if "%1"=="release" goto release
@@ -36,3 +38,4 @@ echo syntax: release | debug | clean
 goto exit
 
 :exit
+endlocal
