@@ -438,7 +438,7 @@ static PyMethodDef pycMethods[] =
     { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
     { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
     { "setLimits",   pyc_setLimits,   METH_VARARGS, "Set engine limits"                   },
-xsxc    { "setOption",   pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
+    { "setOption",   pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
     { "getOptions",  pyc_getOptions,  METH_VARARGS, "Get a list of enabled options"       },
     { NULL, NULL, 0, NULL }
 };
