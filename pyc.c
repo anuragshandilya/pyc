@@ -38,12 +38,41 @@
 
 #define PYC_VERSION "1.0"
 
+typedef struct _options_t
+{
+    char *name;
+    uint32_t value;
+} options_t;
+
+static options_t optlist[] =
+{
+    { "raw",                 CL_SCAN_RAW                 },
+    { "archive",             CL_SCAN_ARCHIVE             },
+    { "mail",                CL_SCAN_MAIL                },
+    { "ole2",                CL_SCAN_OLE2                },
+    { "blockencrypted",      CL_SCAN_BLOCKENCRYPTED      },
+    { "html",                CL_SCAN_HTML                },
+    { "pe",                  CL_SCAN_PE                  },
+    { "blockbroken",         CL_SCAN_BLOCKBROKEN         },
+    { "mailurl",             CL_SCAN_MAILURL             },
+    { "blockmax",            CL_SCAN_BLOCKMAX            },
+    { "algorithmic",         CL_SCAN_ALGORITHMIC         },
+    { "domainlist",          CL_SCAN_PHISHING_DOMAINLIST },
+    { "phishing_blockssl",   CL_SCAN_PHISHING_BLOCKSSL   },
+    { "phishing_blockcloak", CL_SCAN_PHISHING_BLOCKCLOAK },
+    { "elf",                 CL_SCAN_ELF                 },
+    { "pdf",                 CL_SCAN_PDF                 },
+
+    { NULL,                  0                           }
+};
+
 static unsigned int sigs = 0;
 static unsigned int vmain = 0, vdaily = 0;
 static char dbPath[MAX_PATH + 1] = "";
 
 static struct cl_node  *pyci_root = NULL;
 static struct cl_limits pyci_limits;
+static uint32_t options = CL_DB_STDOPT;
 
 static PyObject *PycError;
 static PyGILState_STATE gstate;
@@ -101,7 +130,7 @@ static int pyci_loadDB(void)
         pyci_root = NULL;
     }
 
-    if ((ret = cl_load(dbPath, &pyci_root, &sigs, CL_DB_STDOPT)))
+    if ((ret = cl_load(dbPath, &pyci_root, &sigs, options)))
     {
         pyci_root = NULL;
         goto cleanup;
@@ -207,6 +236,15 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
     return Py_None;
 }
 
+static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
+{
+
+    if (pyci_root)
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
+
 static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 {
     unsigned int ret = 0;
@@ -283,16 +321,125 @@ static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
     return Py_None;
 }
 
+static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
+{
+    PyObject *limits, *keyList, *item, *value, *result;
+    int listSize = 0, i;
+    char *opt = NULL;
+    uint32_t val = 0;
+
+    limits = keyList = item = value = result = NULL;
+
+    if (!PyArg_ParseTuple(args, "O", &limits))
+    {
+        PyErr_SetString(PyExc_TypeError, "Invalid argument");
+        return NULL;
+    }
+
+    if (!PyDict_Check(limits))
+    {
+        PyErr_SetString(PyExc_TypeError, "Limits argument should be a Dictionary");
+        return NULL;
+    }
+
+    Py_INCREF(Py_None);
+    result = Py_None;
+
+    keyList = PyDict_Keys(limits);
+    listSize = PyList_Size(keyList);
+
+    for (i = 0; i < listSize; i++)
+    {
+        item = PyList_GetItem(keyList, i);
+        value = PyDict_GetItem(limits, item);
+        Py_INCREF(item);
+        Py_INCREF(value);
+
+        if (!(PyString_Check(item) && PyInt_Check(value)))
+        {
+            PyErr_SetString(PyExc_TypeError, "Invalid input");
+            result = NULL;
+            break;
+        }
+
+        opt = PyString_AsString(item);
+        val = PyInt_AsLong(value);
+
+        /* FIXME :ugly */
+        if (!strcmp(opt, "maxreclevel"))
+            pyci_limits.maxreclevel = val;
+        else if (!strcmp(opt, "maxfiles"))
+            pyci_limits.maxfiles = val;
+        else if (!strcmp(opt, "maxmailrec"))
+            pyci_limits.maxmailrec = val;
+        else if (!strcmp(opt, "maxratio"))
+            pyci_limits.maxratio = val;
+        else if (!strcmp(opt, "archivememlimit"))
+            pyci_limits.archivememlim = val;
+        else
+        {
+            PyErr_SetString(PycError, "Invalid option");
+            result = NULL;
+            break;
+        }
+
+        Py_DECREF(item);
+        Py_DECREF(value);
+    }
+
+    if (result != Py_None) { Py_DECREF(Py_None); }
+    return result;
+}
+
+static PyObject *pyc_setOption(PyObject *self, PyObject *args)
+{
+    char *option = NULL;
+    uint32_t value = 0;
+    int i;
+
+    if (!PyArg_ParseTuple(args, "si", &option, &value))
+    {
+        PyErr_SetString(PyExc_TypeError, "Invalid input");
+        return NULL;
+    }
+
+    for (i = 0; optlist[i].name; i++)
+    {
+        if (strcmp(option, optlist[i].name)) continue;
+
+        if (value)
+            options |= optlist[i].value;
+        else
+            options &= ~optlist[i].value;
+        break;
+    }
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
+{
+    PyErr_SetString(PycError, "TODO");
+    return NULL;
+}
+
+
+/* --- */
+
 static PyMethodDef pycMethods[] =
 {
     { "getVersions", pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
     { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path of virus database"          },
     { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path of virus database"          },
     { "loadDB",      pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
+    { "isLoaded",    pyc_isLoaded,    METH_VARARGS, "Check if db is loaded or not"        },
     { "scanDesc",    pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
     { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
     { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
-
+    { "setLimits",   pyc_setLimits,   METH_VARARGS, "Set engine limits"                   },
+xsxc    { "setOption",   pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
+    { "getOptions",  pyc_getOptions,  METH_VARARGS, "Get a list of enabled options"       },
     { NULL, NULL, 0, NULL }
 };
 
@@ -315,11 +462,15 @@ initpyc(void)
 
     /* set up archive limits */
     memset(&pyci_limits, 0, sizeof(pyci_limits));
-    pyci_limits.maxfiles = 1000;            /* max files */
-    pyci_limits.maxfilesize = 10 * 1048576; /* maximal archived file size == 10 Mb */
-    pyci_limits.maxreclevel = 5;            /* maximal recursion level */
-    pyci_limits.maxratio = 200;             /* maximal compression ratio */
-    pyci_limits.archivememlim = 0;          /* disable memory limit for bzip2 scanner */
+
+    pyci_limits.maxreclevel   =   8;      /* maximum recursion level for archives */
+    pyci_limits.maxfiles      =   0;      /* maximum number of files to be scanned within a single archive */
+    pyci_limits.maxmailrec    =  64;      /* maximum recursion level for mail files */
+    pyci_limits.maxratio      = 250;      /* maximum compression ratio */
+    pyci_limits.archivememlim =   0;      /* limit memory usage for some unpackers */
+
+    /* compressed files larger than this limit */
+    pyci_limits.maxfilesize = 10 * (1 << 20); /* 10 mb */
 
     atexit(pyci_cleanup); /* I need to free pyci_root */
 }
