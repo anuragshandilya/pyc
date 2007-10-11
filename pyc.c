@@ -153,10 +153,14 @@ static int pyci_loadDB(void)
 static int pyci_checkDB(void)
 {
     unsigned int dbmain = 0, dbdaily = 0;
+
     if (!pyci_root) return pyci_loadDB();
+
     pyci_getVersions(&dbmain, &dbdaily);
+
     if ((dbmain != vmain) || (dbdaily != vdaily))
         return pyci_loadDB();
+
     return 0;
 }
 
