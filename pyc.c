@@ -262,7 +262,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
     }
 
     Py_BEGIN_ALLOW_THREADS;
-    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, CL_SCAN_STDOPT);
+    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, options);
     Py_END_ALLOW_THREADS;
 
     switch (ret)
