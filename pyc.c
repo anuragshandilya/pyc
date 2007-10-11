@@ -493,7 +493,7 @@ initpyc(void)
     /* compressed files larger than this limit */
     pyci_limits.maxfilesize = 10 * (1 << 20); /* 10 mb */
 
-    atexit(pyci_cleanup); /* I need to free pyci_root */
+    Py_AtExit(pyci_cleanup); /* I need to free pyci_root */
 }
 
 int main(int argc, char *argv[])
