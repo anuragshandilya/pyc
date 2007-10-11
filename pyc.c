@@ -436,10 +436,8 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
     }
 
     for (i = 0; optlist[i].name; i++)
-    {
         if (options & optlist[i].value)
             PyList_Append(list, PyString_FromString(optlist[i].name));
-    }
 
     return list;
 }
