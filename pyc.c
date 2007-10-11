@@ -202,7 +202,7 @@ static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 
 static PyObject *pyc_getDBPath(PyObject *self, PyObject *args)
 {
-    return Py_BuildValue("s", dbPath);
+    return PyString_FromString(dbPath);
 }
 
 static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
@@ -310,7 +310,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    result = pyc_scanDesc(self, Py_BuildValue("(i)", fd));
+    result = pyc_scanDesc(self, PyInt_FromInt(fd));
     close(fd);
     return result;
 }
