@@ -72,7 +72,7 @@ static char dbPath[MAX_PATH + 1] = "";
 
 static struct cl_node  *pyci_root = NULL;
 static struct cl_limits pyci_limits;
-static uint32_t options = CL_SCAN_STDOPT;
+static uint32_t pyci_options = CL_SCAN_STDOPT;
 
 static PyObject *PycError;
 static PyGILState_STATE gstate;
@@ -130,7 +130,7 @@ static int pyci_loadDB(void)
         pyci_root = NULL;
     }
 
-    if ((ret = cl_load(dbPath, &pyci_root, &sigs, options)))
+    if ((ret = cl_load(dbPath, &pyci_root, &sigs, CL_DB_STDOPT)))
     {
         pyci_root = NULL;
         goto cleanup;
@@ -262,7 +262,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
     }
 
     Py_BEGIN_ALLOW_THREADS;
-    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, options);
+    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, pyci_options);
     Py_END_ALLOW_THREADS;
 
     switch (ret)
@@ -414,9 +414,9 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
         if (strcmp(option, optlist[i].name)) continue;
 
         if (value)
-            options |= optlist[i].value;
+            pyci_options |= optlist[i].value;
         else
-            options &= ~optlist[i].value;
+            pyci_options &= ~optlist[i].value;
         break;
     }
 
@@ -436,7 +436,7 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
     }
 
     for (i = 0; optlist[i].name; i++)
-        if (options & optlist[i].value)
+        if (pyci_options & optlist[i].value)
             PyList_Append(list, PyString_FromString(optlist[i].name));
 
     return list;
