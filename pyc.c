@@ -310,7 +310,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    result = pyc_scanDesc(self, PyInt_FromInt(fd));
+    result = pyc_scanDesc(self, PyInt_FromLong(fd));
     close(fd);
     return result;
 }
