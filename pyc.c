@@ -72,7 +72,7 @@ static char dbPath[MAX_PATH + 1] = "";
 
 static struct cl_node  *pyci_root = NULL;
 static struct cl_limits pyci_limits;
-static uint32_t options = CL_DB_STDOPT;
+static uint32_t options = CL_SCAN_STDOPT;
 
 static PyObject *PycError;
 static PyGILState_STATE gstate;
@@ -136,10 +136,8 @@ static int pyci_loadDB(void)
         goto cleanup;
     }
 
-    /* build the final tree */
     if ((ret = cl_build(pyci_root)))
     {
-        /* free the partial tree */
         cl_free(pyci_root);
         pyci_root = NULL;
         goto cleanup;
@@ -167,8 +165,7 @@ static void pyci_cleanup(void)
     if (pyci_root) cl_free(pyci_root);
 }
 
-/* ------------- */
-
+/* Public */
 static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 {
     const char *version = NULL;
@@ -321,6 +318,7 @@ static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
     return Py_None;
 }
 
+#define Opt(key) if (!strcmp(opt, #key)) pyci_limits.key = val
 static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 {
     PyObject *limits, *keyList, *item, *value, *result;
@@ -352,8 +350,6 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
     {
         item = PyList_GetItem(keyList, i);
         value = PyDict_GetItem(limits, item);
-        Py_INCREF(item);
-        Py_INCREF(value);
 
         if (!(PyString_Check(item) && PyInt_Check(value)))
         {
@@ -365,30 +361,40 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
         opt = PyString_AsString(item);
         val = PyInt_AsLong(value);
 
-        /* FIXME :ugly */
-        if (!strcmp(opt, "maxreclevel"))
-            pyci_limits.maxreclevel = val;
-        else if (!strcmp(opt, "maxfiles"))
-            pyci_limits.maxfiles = val;
-        else if (!strcmp(opt, "maxmailrec"))
-            pyci_limits.maxmailrec = val;
-        else if (!strcmp(opt, "maxratio"))
-            pyci_limits.maxratio = val;
-        else if (!strcmp(opt, "archivememlimit"))
-            pyci_limits.archivememlim = val;
+        Opt(maxreclevel);
+        else Opt(maxfiles);
+        else Opt(maxmailrec);
+        else Opt(maxratio);
+        else Opt(archivememlim);
         else
         {
             PyErr_SetString(PycError, "Invalid option");
             result = NULL;
             break;
         }
-
-        Py_DECREF(item);
-        Py_DECREF(value);
     }
 
     if (result != Py_None) { Py_DECREF(Py_None); }
     return result;
+}
+
+#define DictSetItem(key) PyDict_SetItem(limits, PyString_FromString(#key), PyInt_FromLong(pyci_limits.key))
+static PyObject *pyc_getLimits(PyObject *self, PyObject *args)
+{
+    PyObject *limits = PyDict_New();
+
+    if (!limits)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate a Dictionary");
+        return NULL;
+    }
+
+    DictSetItem(maxreclevel);
+    DictSetItem(maxfiles);
+    DictSetItem(maxmailrec);
+    DictSetItem(maxratio);
+    DictSetItem(archivememlim);
+    return limits;
 }
 
 static PyObject *pyc_setOption(PyObject *self, PyObject *args)
@@ -420,13 +426,25 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
 
 static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 {
-    PyErr_SetString(PycError, "TODO");
-    return NULL;
+    int i;
+    PyObject *list = PyList_New(0);
+
+    if (!list)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate a List");
+        return NULL;
+    }
+
+    for (i = 0; optlist[i].name; i++)
+    {
+        if (options & optlist[i].value)
+            PyList_Append(list, PyString_FromString(optlist[i].name));
+    }
+
+    return list;
 }
 
-
-/* --- */
-
+/* Methods Table */
 static PyMethodDef pycMethods[] =
 {
     { "getVersions", pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
@@ -438,6 +456,7 @@ static PyMethodDef pycMethods[] =
     { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
     { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
     { "setLimits",   pyc_setLimits,   METH_VARARGS, "Set engine limits"                   },
+    { "getLimits",   pyc_getLimits,   METH_VARARGS, "Get engine limits as a Dictionary"   },
     { "setOption",   pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
     { "getOptions",  pyc_getOptions,  METH_VARARGS, "Get a list of enabled options"       },
     { NULL, NULL, 0, NULL }
