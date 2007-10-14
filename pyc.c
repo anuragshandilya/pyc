@@ -260,13 +260,20 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
     unsigned int ret = 0;
     unsigned long scanned = 0;
     const char *virname = NULL;
-    int fd = -1;
+    PyObject *file;
 
-    if (!PyArg_ParseTuple(args, "i", &fd))
+    if (!PyArg_ParseTuple(args, "O", &file))
     {
-        PyErr_SetString(PycError, "Invalid argument");
+        PyErr_SetString(PycError, "scanDesc: Invalid argument");
         return NULL;
     }
+
+    if (!PyFile_Check(file))
+    {
+        PyErr_SetString(PyExc_TypeError, "File object needed");
+        return NULL;
+    }
+
 
     if ((ret = pyci_checkDB()))
     {
@@ -275,7 +282,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
     }
 
     Py_BEGIN_ALLOW_THREADS;
-    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, pyci_options);
+    ret = cl_scandesc(fileno(PyFile_AsFile(file)), &virname, &scanned, pyci_root, &pyci_limits, pyci_options);
     Py_END_ALLOW_THREADS;
 
     switch (ret)
@@ -290,10 +297,10 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 
 static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 {
-    PyObject *result = NULL;
     char *filename = NULL;
     struct stat info;
-    int fd = -1;
+    PyObject *file = NULL;
+    FILE *fp = NULL;
 
     if (!PyArg_ParseTuple(args, "s", &filename))
     {
@@ -313,15 +320,19 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0)
+    if (!(fp = fopen(filename, "rb")))
     {
         PyErr_SetFromErrno(PycError);
         return NULL;
     }
 
-    result = pyc_scanDesc(self, Py_BuildValue("(i)", fd));
-    close(fd);
-    return result;
+    if (!(file = PyFile_FromFile(fp, filename, "rb", fclose)))
+    {
+        PyErr_SetFromErrno(PycError);
+        return NULL;
+    }
+
+    return pyc_scanDesc(self, Py_BuildValue("(O)", file));
 }
 
 static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
