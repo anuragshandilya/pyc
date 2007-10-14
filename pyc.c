@@ -207,8 +207,7 @@ static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 
     pyci_setDBPath(path);
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *pyc_getDBPath(PyObject *self, PyObject *args)
@@ -244,8 +243,7 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
@@ -329,8 +327,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
 {
     cl_debug();
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 #define Opt(key) if (!strcmp(opt, #key)) pyci_limits.key = val
@@ -435,8 +432,7 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
         break;
     }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
