@@ -66,9 +66,7 @@ static options_t optlist[] =
     { "pe",                  CL_SCAN_PE                  },
     { "blockbroken",         CL_SCAN_BLOCKBROKEN         },
     { "mailurl",             CL_SCAN_MAILURL             },
-    { "blockmax",            CL_SCAN_BLOCKMAX            },
     { "algorithmic",         CL_SCAN_ALGORITHMIC         },
-    { "domainlist",          CL_SCAN_PHISHING_DOMAINLIST },
     { "phishing_blockssl",   CL_SCAN_PHISHING_BLOCKSSL   },
     { "phishing_blockcloak", CL_SCAN_PHISHING_BLOCKCLOAK },
     { "elf",                 CL_SCAN_ELF                 },
@@ -100,7 +98,7 @@ static int pyci_getVersion(const char *name)
 
     if (access(path, 0) < 0)
     {
-        snprintf(path, MAX_PATH, "%s/%s.inc/%s.info", dbPath, name, name);
+        snprintf(path, MAX_PATH, "%s/%s.cld", dbPath, name, name);
         path[MAX_PATH] = 0;
     }
 
@@ -340,7 +338,7 @@ static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-#define Opt(key) if (!strcmp(opt, #key)) pyci_limits.key = val
+#define Opt(key) if (!strcmp(opt, #key)) pyci_limits.##key = val
 static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 {
     PyObject *limits, *keyList, *item, *value, *result;
@@ -383,10 +381,10 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
         opt = PyString_AsString(item);
         val = PyInt_AsLong(value);
 
-        Opt(maxreclevel);
+        Opt(maxscansize);
+        else Opt(maxfilesize);
+        else Opt(maxreclevel);
         else Opt(maxfiles);
-        else Opt(maxmailrec);
-        else Opt(maxratio);
         else Opt(archivememlim);
         else
         {
@@ -411,10 +409,10 @@ static PyObject *pyc_getLimits(PyObject *self, PyObject *args)
         return NULL;
     }
 
+    DictSetItem(maxscansize);
+    DictSetItem(maxfilesize);
     DictSetItem(maxreclevel);
     DictSetItem(maxfiles);
-    DictSetItem(maxmailrec);
-    DictSetItem(maxratio);
     DictSetItem(archivememlim);
     return limits;
 }
@@ -499,16 +497,11 @@ initpyc(void)
     dbPath[MAX_PATH] = 0;
 
     /* set up archive limits */
-    memset(&pyci_limits, 0, sizeof(pyci_limits));
-
-    pyci_limits.maxreclevel   =   8;      /* maximum recursion level for archives */
-    pyci_limits.maxfiles      =   0;      /* maximum number of files to be scanned within a single archive */
-    pyci_limits.maxmailrec    =  64;      /* maximum recursion level for mail files */
-    pyci_limits.maxratio      = 250;      /* maximum compression ratio */
-    pyci_limits.archivememlim =   0;      /* limit memory usage for some unpackers */
-
-    /* compressed files larger than this limit */
-    pyci_limits.maxfilesize = 10 * (1 << 20); /* 10 mb */
+    pyci_limits.maxscansize   = 150 * (1 << 20);    /* 150 mb : during the scanning of archives this size will never be exceeded */
+    pyci_limits.maxfilesize   = 100 * (1 << 20);    /* 100 mb : compressed files will only be decompressed and scanned up to this size */
+    pyci_limits.maxreclevel   = 15;                  /* maximum recursion level for archives */
+    pyci_limits.maxfiles      = 10000;               /* maximum number of files to be scanned within a single archive */
+    pyci_limits.archivememlim = 0;                   /* limit memory usage for some unpackers */
 
     Py_AtExit(pyci_cleanup); /* I need to free pyci_root */
 }

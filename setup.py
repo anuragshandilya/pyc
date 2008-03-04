@@ -4,14 +4,16 @@ from sys import platform
 from os import environ
 
 if platform == 'win32':
-    CFLAGS = []
+    CFLAGS = ['/LD']
     LIBS = []
     CLAMAVDEVROOT = environ.get('CLAMAV_DEVROOT')
     DEBUG = environ.get('CLAMAV_DEBUG', None)
     if DEBUG is not None:
-        LIBFILE = 'contrib/msvc/Debug/libclamavd.lib'
+        LIBFILE = 'contrib/msvc/Debug/Win32/libclamavd.lib'
+        CFLAGS.append('-MDd')
     else:
-        LIBFILE = 'contrib/msvc/Release/libclamav.lib'
+        LIBFILE = 'contrib/msvc/Release/Win32/libclamav.lib'
+        CFLAGS.append('-MD')
     CLINCLUDE = ['/'.join([CLAMAVDEVROOT, 'libclamav'])]
     CLLIB = ['/'.join([CLAMAVDEVROOT, '', LIBFILE])]
 else:
@@ -24,6 +26,7 @@ pyc = Extension('pyc',
                 sources = ['pyc.c'],
                 libraries = LIBS,
                 extra_objects = CLLIB,
+                extra_link_args = [],
                 extra_compile_args = CFLAGS)
 
 # Build : python setup.py build
