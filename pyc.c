@@ -197,7 +197,6 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 
 static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 {
-
     char *path = NULL;
     if (!PyArg_ParseTuple(args, "s", &path))
     {
