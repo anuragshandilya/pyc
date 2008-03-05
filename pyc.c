@@ -115,8 +115,10 @@ static int pyci_getVersion(const char *name)
 
 static void pyci_getVersions(unsigned int *main, unsigned int *daily)
 {
+    gstate = PyGILState_Ensure();
     *main = pyci_getVersion("main");
     *daily = pyci_getVersion("daily");
+    PyGILState_Release(gstate);
 }
 
 static void pyci_setDBPath(const char *path)
@@ -154,10 +156,9 @@ static int pyci_loadDB(void)
         goto cleanup;
     }
 
-    pyci_getVersions(&vmain, &vdaily);
-
  cleanup:
     PyGILState_Release(gstate);
+    pyci_getVersions(&vmain, &vdaily);
     return ret;
 }
 
@@ -249,7 +250,6 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
 
 static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
 {
-
     if (pyci_root)
         Py_RETURN_TRUE;
     else
@@ -373,6 +373,8 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
     keyList = PyDict_Keys(limits);
     listSize = PyList_Size(keyList);
 
+    gstate = PyGILState_Ensure();
+
     for (i = 0; i < listSize; i++)
     {
         item = PyList_GetItem(keyList, i);
@@ -400,6 +402,8 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
             break;
         }
     }
+
+    PyGILState_Release(gstate);
 
     if (result != Py_None) { Py_DECREF(Py_None); }
     return result;
@@ -436,6 +440,8 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
         return NULL;
     }
 
+    gstate = PyGILState_Ensure();
+
     for (i = 0; optlist[i].name; i++)
     {
         if (strcmp(option, optlist[i].name)) continue;
@@ -446,6 +452,8 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
             pyci_options &= ~optlist[i].value;
         break;
     }
+
+    PyGILState_Release(gstate);
 
     Py_RETURN_NONE;
 }
