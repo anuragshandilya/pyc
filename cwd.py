@@ -93,6 +93,7 @@ class Server(dispatcher):
 
 if __name__ == '__main__':
     port = 3310
+    print 'Preloading Virus Database'
     pyc.loadDB()
     s = Server('localhost', port, CwdHandler)
     print "Cwd Server running on port %s" % port
