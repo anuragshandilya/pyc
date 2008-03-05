@@ -102,6 +102,8 @@ static int pyci_getVersion(const char *name)
         path[MAX_PATH] = 0;
     }
 
+    if (access(path, 0) < 0) return -1; /* Don't bother spamming messages */
+
     if ((cvd = cl_cvdhead(path)))
     {
         dbver = cvd->version;
@@ -159,6 +161,7 @@ static int pyci_loadDB(void)
     return ret;
 }
 
+/* FIXME: Use db dir stat functions */
 static int pyci_checkDB(void)
 {
     unsigned int dbmain = 0, dbdaily = 0;
@@ -193,6 +196,7 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
     return Py_BuildValue("(s,i,i,i)", version, vmain, vdaily, sigs);
 }
 
+/* FIXME: invalidate the db */
 static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 {
     char *path = NULL;
