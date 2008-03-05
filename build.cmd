@@ -32,12 +32,17 @@ goto copylib
 
 :copylib
 for /R %%i in (*.pyd) do set destdir=%%~di%%~pi
-xcopy /q/y %DLL% %destdir%
+if not exist "%destdir%" goto failed
+xcopy /q/y %DLL% "%destdir%"
 if exist %destdir%\pyc.pyd.manifest mt -nologo -manifest %destdir%\pyc.pyd.manifest -outputresource:%destdir%\pyc.pyd;#2
 goto exit
 
 :usage
-echo syntax: release | debug | clean
+echo syntax: release debug clean
+goto exit
+
+:failed
+echo build failed
 goto exit
 
 :exit
