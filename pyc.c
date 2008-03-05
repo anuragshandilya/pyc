@@ -20,9 +20,18 @@
 
 #include <Python.h>
 #include <clamav.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
+#ifdef _WIN32
+#define R_OK 4
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #ifdef _MSC_VER
 typedef unsigned __int64 uint64_t;
@@ -96,13 +105,14 @@ static int pyci_getVersion(const char *name)
     snprintf(path, MAX_PATH, "%s/%s.cvd", dbPath, name);
     path[MAX_PATH] = 0;
 
-    if (access(path, 0) < 0)
+    if (access(path, R_OK) < 0)
     {
         snprintf(path, MAX_PATH, "%s/%s.cld", dbPath, name, name);
         path[MAX_PATH] = 0;
     }
 
-    if (access(path, 0) < 0) return -1; /* Don't bother spamming messages */
+    /* Don't bother spamming messages, perhaps the result should be unsigned */
+    if (access(path, R_OK) < 0) return -1;
 
     if ((cvd = cl_cvdhead(path)))
     {
@@ -265,13 +275,13 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "O", &file))
     {
-        PyErr_SetString(PycError, "scanDesc: Invalid argument");
+        PyErr_SetString(PycError, "Invalid arguments");
         return NULL;
     }
 
     if (!PyFile_Check(file))
     {
-        PyErr_SetString(PyExc_TypeError, "File object needed");
+        PyErr_SetString(PyExc_TypeError, "A File object is needed");
         return NULL;
     }
 
@@ -305,7 +315,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "s", &filename))
     {
-        PyErr_SetString(PyExc_TypeError, "Need a String for filename");
+        PyErr_SetString(PyExc_TypeError, "A string is needed for the filename");
         return NULL;
     }
 
@@ -357,13 +367,13 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "O", &limits))
     {
-        PyErr_SetString(PyExc_TypeError, "Invalid argument");
+        PyErr_SetString(PyExc_TypeError, "Invalid arguments");
         return NULL;
     }
 
     if (!PyDict_Check(limits))
     {
-        PyErr_SetString(PyExc_TypeError, "Limits argument should be a Dictionary");
+        PyErr_SetString(PyExc_TypeError, "A Dictionary is needed to set limits");
         return NULL;
     }
 
@@ -382,7 +392,7 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 
         if (!(PyString_Check(item) && PyInt_Check(value)))
         {
-            PyErr_SetString(PyExc_TypeError, "Invalid input");
+            PyErr_SetString(PyExc_TypeError, "Invalid key pair while parsing limits (arguments should be String: Int)");
             result = NULL;
             break;
         }
@@ -397,7 +407,7 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
         else Opt(archivememlim);
         else
         {
-            PyErr_SetString(PycError, "Invalid option");
+            PyErr_SetString(PycError, "Invalid option specified");
             result = NULL;
             break;
         }
@@ -416,7 +426,7 @@ static PyObject *pyc_getLimits(PyObject *self, PyObject *args)
 
     if (!limits)
     {
-        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate a Dictionary");
+        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate memory for the Dictionary");
         return NULL;
     }
 
@@ -436,7 +446,7 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "si", &option, &value))
     {
-        PyErr_SetString(PyExc_TypeError, "Invalid input");
+        PyErr_SetString(PyExc_TypeError, "Invalid arguments");
         return NULL;
     }
 
@@ -465,7 +475,7 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 
     if (!list)
     {
-        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate a List");
+        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate memory for the List");
         return NULL;
     }
 
@@ -480,8 +490,8 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 static PyMethodDef pycMethods[] =
 {
     { "getVersions", pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
-    { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path of virus database"          },
-    { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path of virus database"          },
+    { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path for virus database"         },
+    { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path for virus database"         },
     { "loadDB",      pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
     { "isLoaded",    pyc_isLoaded,    METH_VARARGS, "Check if db is loaded or not"        },
     { "scanDesc",    pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
