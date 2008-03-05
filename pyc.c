@@ -296,7 +296,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 {
     char *filename = NULL;
     struct stat info;
-    PyObject *file = NULL;
+    PyObject *file = NULL, *result = NULL;
     FILE *fp = NULL;
 
     if (!PyArg_ParseTuple(args, "s", &filename))
@@ -323,13 +323,16 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if (!(file = PyFile_FromFile(fp, filename, "rb", fclose)))
+    if (!(file = PyFile_FromFile(fp, filename, "rb", NULL)))
     {
         PyErr_SetFromErrno(PycError);
         return NULL;
     }
 
-    return pyc_scanDesc(self, Py_BuildValue("(O)", file));
+    result = pyc_scanDesc(self, Py_BuildValue("(O)", file));
+    Py_XDECREF(file);
+    fclose(fp);
+    return result;
 }
 
 static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
