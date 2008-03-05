@@ -12,33 +12,35 @@ if "%1"=="clean" goto clean
 goto usage
 
 :release
-rd /s/q build
+rd /s/q build 2>NUL:
 set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Release\Win32\*.dll
+echo Building Release
 goto build
 
 :debug
-rd /s/q build
+rd /s/q build 2>NUL:
 set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Debug\Win32\*.dll
 set CLAMAV_DEBUG=yes
+echo Building Debug
 goto build
 
 :clean
-rd /s/q build
+rd /s/q build 2>NUL:
 goto exit
 
 :build
-python setup.py build
+python setup.py build >NUL:
 goto copylib
 
 :copylib
 for /R %%i in (*.pyd) do set destdir=%%~di%%~pi
 if not exist "%destdir%" goto failed
-xcopy /q/y %DLL% "%destdir%"
+xcopy /q/y %DLL% "%destdir%" >NUL:
 if exist %destdir%\pyc.pyd.manifest mt -nologo -manifest %destdir%\pyc.pyd.manifest -outputresource:%destdir%\pyc.pyd;#2
 goto exit
 
 :usage
-echo syntax: release debug clean
+echo usage: %0 release debug clean
 goto exit
 
 :failed
