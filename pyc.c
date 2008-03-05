@@ -51,11 +51,11 @@ typedef signed   __int8  int8_t;
 
 typedef struct _options_t
 {
-    char *name;
-    uint32_t value;
+    const char *name;
+    const uint32_t value;
 } options_t;
 
-static options_t optlist[] =
+static const options_t optlist[] =
 {
     { "raw",                 CL_SCAN_RAW                 },
     { "archive",             CL_SCAN_ARCHIVE             },
