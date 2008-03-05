@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #ifdef _WIN32
 #define R_OK 4
@@ -321,7 +322,7 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 
     if (stat(filename, &info) < 0)
     {
-        PyErr_SetFromErrno(PycError);
+        PyErr_SetString(PycError, strerror(errno));
         return NULL;
     }
 
