@@ -4,7 +4,7 @@ from sys import platform
 from os import environ
 
 if platform == 'win32':
-    CFLAGS = ['/LD']
+    CFLAGS = []
     LIBS = []
     CLAMAVDEVROOT = environ.get('CLAMAV_DEVROOT')
     DEBUG = environ.get('CLAMAV_DEBUG', None)
