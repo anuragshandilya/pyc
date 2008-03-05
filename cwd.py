@@ -40,19 +40,63 @@ class CwdHandler(async_chat):
         pass
 
     def collect_incoming_data(self, data):
-        if data != 'STREAM':
+        if data.startswith('SCAN '):
+            self.do_SCAN(data.split('SCAN ', 1).pop())
+        elif data == 'PING':
+            self.do_PING()
+        elif data.startswith('CONTSCAN '):
+            self.do_CONTSCAN(data.split('CONTSCAN ', 1).pop())
+        elif data == 'VERSION':
+            self.do_VERSION()
+        elif data == 'STREAM':
+            self.do_STREAM()
+        else:
             print 'Unknown command', data
             self.connection.send('UNKNOWN COMMAND\n')
-            self.close()
-            return
 
+        self.close()
+
+    def scanfile(self, filename, name=None):
+        if name is None: name = filename
+        ## FIXME: why unc paths are not working here?
+        if filename.startswith('\\\\?\\'):
+            filename = filename.split('\\\\?\\', 1).pop()
+        try:
+            infected, virus = pyc.scanFile(filename)
+            if infected:
+                self.connection.send('%s: %s FOUND\n' % (name, virus))
+                print '%s: %s FOUND' % (name, virus)
+            else:
+                self.connection.send('%s: OK\n' % (name, virus))
+        except:
+            t, val, tb = exc_info()
+            print '%s: ERROR %s' % (name, val.message)
+            self.connection.send('%s: ERROR %s\n' % (name, val.message))
+
+    def do_SCAN(self, filename):
+        print 'SCAN %s' % filename
+        self.connection.send('ERROR Not implemented')
+
+    def do_PING(self):
+        self.connection.send('PONG\n')
+
+    def do_CONTSCAN(self, filename):
+        print 'CONTSCAN %s' % filename
+        self.scanfile(filename)
+
+    def do_VERSION(self):
+        version = pyc.getVersions()[0]
+        print 'VERSION', version
+        self.connection.send(version + '\n')
+
+    def do_STREAM(self):
         stream = socket(AF_INET, SOCK_STREAM)
         stream.settimeout(300)
         stream.bind(('localhost', 0))
         stream.listen(1)
         self.connection.send('PORT %d\n' % stream.getsockname()[1])
         conn, addr = stream.accept()
-        f, name = mkstemp()
+        f, filename = mkstemp()
         while 1:
             d = conn.recv(1024)
             if not d: break
@@ -60,22 +104,13 @@ class CwdHandler(async_chat):
         conn.close()
         os_close(f)
 
-        try:
-            infected, virus = pyc.scanFile(name)
-            if infected:
-                self.connection.send('stream: %s FOUND\n' % virus)
-            else:
-                self.connection.send('stream: OK\n')
-        except:
-            t, val, tb = exc_info()
-            print 'Error', t, val
-            self.connection.send('stream: ERROR %s\n' % val)
+        self.scanfile(filename, 'stream')
 
         try:
-            unlink(name)
+            unlink(filename)
         except:
             print 'Error unlinking tempfile'
-        self.close()
+
 
 class Server(dispatcher):
     def __init__(self, ip, port, handler):
