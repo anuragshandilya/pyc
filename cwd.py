@@ -41,8 +41,8 @@ class CwdHandler(async_chat):
 
     def collect_incoming_data(self, data):
         if data != 'STREAM':
-            print 'Unsupported command', data
-            self.connection.send('ERROR Unsupported command %s\n' % data)
+            print 'Unknown command', data
+            self.connection.send('UNKNOWN COMMAND\n')
             self.close()
             return
 
@@ -63,12 +63,13 @@ class CwdHandler(async_chat):
         try:
             infected, virus = pyc.scanFile(name)
             if infected:
-                self.connection.send('STREAM: %s FOUND\n' % virus)
+                self.connection.send('stream: %s FOUND\n' % virus)
             else:
-                self.connection.send('STREAM: OK\n')
+                self.connection.send('stream: OK\n')
         except:
-            self.connection.send('STREAM: ERROR\n')
-            print exc_info()
+            t, val, tb = exc_info()
+            print 'Error', t, val
+            self.connection.send('stream: ERROR %s\n' % val)
 
         try:
             unlink(name)
