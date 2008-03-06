@@ -44,7 +44,9 @@ class CwdHandler(async_chat):
         pass
 
     def scanfile(self, filename, name):
-        ## FIXME: why unc paths are not working here?
+        ## FIXME: stat() in pyc.c does not like unc paths
+        ## on win32 is almost impossible to pass an fd from py to libclamav
+        ## due to crt hell with posix layer
         if filename.startswith('\\\\?\\'):
             filename = filename.split('\\\\?\\', 1).pop()
         try:
