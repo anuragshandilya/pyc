@@ -12,13 +12,11 @@ if "%1"=="clean" goto clean
 goto usage
 
 :release
-rd /s/q build 2>NUL:
 set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Release\Win32\*.dll
 echo Building Release
 goto build
 
 :debug
-rd /s/q build 2>NUL:
 set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Debug\Win32\*.dll
 set CLAMAV_DEBUG=yes
 echo Building Debug
@@ -29,7 +27,7 @@ rd /s/q build 2>NUL:
 goto exit
 
 :build
-python setup.py build >NUL:
+python setup.py build
 goto copylib
 
 :copylib
