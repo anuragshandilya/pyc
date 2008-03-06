@@ -68,33 +68,33 @@ class CwdHandler(async_chat):
         if isdir(path): return self.scandir(path)
         self.connection.send('%s: ERROR not a regular file or a directory\n' % path)
 
-    def collect_incoming_data(self, data):
+    def collect_incoming_data(self, cmd):
         client = self.connection.getpeername()
-        data = data.strip()
-        if data.startswith('SCAN '):
-            self.do_SCAN(data.split('SCAN ', 1).pop())
-        elif data.startswith('RAWSCAN '):
-            self.do_RAWSCAN(data.split('RAWSCAN ', 1).pop())
-        elif data == 'QUIT' or data == 'SHUTDOWN':
+        cmd = cmd.strip()
+        if cmd.startswith('SCAN '):
+            self.do_SCAN(cmd.split('SCAN ', 1).pop())
+        elif cmd.startswith('RAWSCAN '):
+            self.do_RAWSCAN(cmd.split('RAWSCAN ', 1).pop())
+        elif cmd == 'QUIT' or cmd == 'SHUTDOWN':
             self.do_QUIT()
-        elif data == 'RELOAD':
+        elif cmd == 'RELOAD':
             self.do_RELOAD()
-        elif data == 'PING':
+        elif cmd == 'PING':
             self.do_PING()
-        elif data.startswith('CONTSCAN '):
-            self.do_CONTSCAN(data.split('CONTSCAN ', 1).pop())
-        elif data == 'VERSION':
+        elif cmd.startswith('CONTSCAN '):
+            self.do_CONTSCAN(cmd.split('CONTSCAN ', 1).pop())
+        elif cmd == 'VERSION':
             self.do_VERSION()
-        elif data == 'SESSION':
+        elif cmd == 'SESSION':
             self.do_SESSION(client)
-        elif data == 'END':
+        elif cmd == 'END':
             self.do_END(client)
-        elif data == 'STREAM':
+        elif cmd == 'STREAM':
             self.do_STREAM()
-        elif data.startswith('MULTISCAN '):
-            self.do_MULTISCAN(data.split('MULTISCAN ', 1).pop())
+        elif cmd.startswith('MULTISCAN '):
+            self.do_MULTISCAN(cmd.split('MULTISCAN ', 1).pop())
         else:
-            print 'Unknown command', data
+            print 'Unknown command', cmd
             self.connection.send('UNKNOWN COMMAND\n')
         if not client in self.server.sessions: self.close()
 
