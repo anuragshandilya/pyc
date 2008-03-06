@@ -29,6 +29,7 @@
 
 #ifdef _WIN32
 #define R_OK 4
+#include <windows.h>
 #include <io.h>
 #else
 #include <unistd.h>
@@ -56,6 +57,9 @@ typedef signed   __int8  int8_t;
 #ifndef O_BINARY
 #define O_BINARY (0)
 #endif
+
+#define PyErr_PycFromErrno(func) \
+    PyErr_SetObject(PycError, PyString_FromFormat(#func": %s", strerror(errno)))
 
 #define PYC_VERSION "1.0"
 
@@ -200,7 +204,7 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 
     if (!(pyci_root && vmain && vdaily))
     {
-        PyErr_SetString(PycError, "No database loaded");
+        PyErr_SetString(PycError, "pyc_getVersions: No database loaded");
         return NULL;
     }
 
@@ -214,7 +218,7 @@ static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
     char *path = NULL;
     if (!PyArg_ParseTuple(args, "s", &path))
     {
-        PyErr_SetString(PycError, "Database path must be a String");
+        PyErr_SetString(PycError, "pyc_setDBPath: Database path must be a String");
         return NULL;
     }
 
@@ -235,7 +239,7 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
 
     if (!PyArg_UnpackTuple(args, "loadDB", 0, 1, &result))
     {
-        PyErr_SetString(PycError, "Invalid arguments");
+        PyErr_SetString(PycError, "pyc_loadDB: Invalid arguments");
         return NULL;
     }
 
@@ -245,14 +249,14 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
             pyci_setDBPath(PyString_AsString(result));
         else
         {
-            PyErr_SetString(PyExc_TypeError, "Database path must be a String");
+            PyErr_SetString(PyExc_TypeError, "pyc_loadDB: Database path must be a String");
             return NULL;
         }
     }
 
     if ((ret = pyci_loadDB()))
     {
-        PyErr_SetString(PycError, cl_strerror(ret));
+        PyErr_PycFromErrno(pyc_loadDB);
         return NULL;
     }
 
@@ -267,34 +271,29 @@ static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
         Py_RETURN_FALSE;
 }
 
+/* Warning passing fd on windows works only if the crt used by python is
+   the same used to compile libclamav */
 static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 {
     unsigned int ret = 0;
     unsigned long scanned = 0;
     const char *virname = NULL;
-    PyObject *file;
+    int fd = -1;
 
-    if (!PyArg_ParseTuple(args, "O", &file))
+    if (!PyArg_ParseTuple(args, "i", &fd) || (fd < 0))
     {
-        PyErr_SetString(PycError, "Invalid arguments");
+        PyErr_SetString(PycError, "pyc_scanDesc: Invalid arguments");
         return NULL;
     }
-
-    if (!PyFile_Check(file))
-    {
-        PyErr_SetString(PyExc_TypeError, "A File object is needed");
-        return NULL;
-    }
-
 
     if ((ret = pyci_checkDB()))
     {
-        PyErr_SetString(PycError, cl_strerror(ret));
+        PyErr_PycFromErrno(pyc_scanDesc);
         return NULL;
     }
 
     Py_BEGIN_ALLOW_THREADS;
-    ret = cl_scandesc(fileno(PyFile_AsFile(file)), &virname, &scanned, pyci_root, &pyci_limits, pyci_options);
+    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, pyci_options);
     Py_END_ALLOW_THREADS;
 
     switch (ret)
@@ -303,7 +302,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
         case CL_VIRUS: return Py_BuildValue("(O,s)", Py_True,  virname);
     }
 
-    PyErr_SetString(PycError, cl_strerror(ret));
+    PyErr_SetObject(PycError, PyString_FromFormat("pyc_ScanDesc: %s", cl_strerror(ret)));
     return NULL;
 }
 
@@ -311,42 +310,35 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 {
     char *filename = NULL;
     struct stat info;
-    PyObject *file = NULL, *result = NULL;
-    FILE *fp = NULL;
+    PyObject *result = NULL;
+    int fd = -1;
 
     if (!PyArg_ParseTuple(args, "s", &filename))
     {
-        PyErr_SetString(PyExc_TypeError, "A string is needed for the filename");
+        PyErr_SetString(PyExc_TypeError, "pyc_scanFile: A string is needed for the filename");
         return NULL;
     }
 
     if (stat(filename, &info) < 0)
     {
-        PyErr_SetString(PycError, strerror(errno));
+        PyErr_PycFromErrno(pyc_scaFile);
         return NULL;
     }
 
     if (!(S_ISREG(info.st_mode) || S_ISLNK(info.st_mode)))
     {
-        PyErr_SetString(PycError, "Not a regular file");
+        PyErr_SetString(PycError, "pyc_scanFile: Not a regular file");
         return NULL;
     }
 
-    if (!(fp = fopen(filename, "rb")))
+    if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0)
     {
-        PyErr_SetString(PycError, strerror(errno));
+        PyErr_PycFromErrno(pyc_scanFile);
         return NULL;
     }
 
-    if (!(file = PyFile_FromFile(fp, filename, "rb", NULL)))
-    {
-        PyErr_SetString(PycError, strerror(errno));
-        return NULL;
-    }
-
-    result = pyc_scanDesc(self, Py_BuildValue("(O)", file));
-    Py_XDECREF(file);
-    fclose(fp);
+    result = pyc_scanDesc(self, Py_BuildValue("(i)", fd));
+    close(fd);
     return result;
 }
 
@@ -368,13 +360,13 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "O", &limits))
     {
-        PyErr_SetString(PyExc_TypeError, "Invalid arguments");
+        PyErr_SetString(PyExc_TypeError, "pyc_setLimits: Invalid arguments");
         return NULL;
     }
 
     if (!PyDict_Check(limits))
     {
-        PyErr_SetString(PyExc_TypeError, "A Dictionary is needed to set limits");
+        PyErr_SetString(PyExc_TypeError, "pyc_setLimits: A Dictionary is needed to set limits");
         return NULL;
     }
 
@@ -393,7 +385,7 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 
         if (!(PyString_Check(item) && PyInt_Check(value)))
         {
-            PyErr_SetString(PyExc_TypeError, "Invalid key pair while parsing limits (arguments should be String: Int)");
+            PyErr_SetString(PyExc_TypeError, "pyc_setLimits: Invalid key pair while parsing limits (arguments should be String: Int)");
             result = NULL;
             break;
         }
@@ -408,7 +400,7 @@ static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
         else Opt(archivememlim);
         else
         {
-            PyErr_SetString(PycError, "Invalid option specified");
+            PyErr_SetString(PycError, "pyc_setLimits: Invalid option specified");
             result = NULL;
             break;
         }
@@ -427,7 +419,7 @@ static PyObject *pyc_getLimits(PyObject *self, PyObject *args)
 
     if (!limits)
     {
-        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate memory for the Dictionary");
+        PyErr_SetString(PyExc_RuntimeError, "pyc_getLimits: Cannot allocate memory for the Dictionary");
         return NULL;
     }
 
@@ -447,7 +439,7 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "si", &option, &value))
     {
-        PyErr_SetString(PyExc_TypeError, "Invalid arguments");
+        PyErr_SetString(PyExc_TypeError, "pyc_setOption: Invalid arguments");
         return NULL;
     }
 
@@ -476,7 +468,7 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 
     if (!list)
     {
-        PyErr_SetString(PyExc_RuntimeError, "Cannot allocate memory for the List");
+        PyErr_SetString(PyExc_RuntimeError, "pyc_getOptions: Cannot allocate memory for the List");
         return NULL;
     }
 
