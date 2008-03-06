@@ -334,13 +334,13 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 
     if (!(fp = fopen(filename, "rb")))
     {
-        PyErr_SetFromErrno(PycError);
+        PyErr_SetString(PycError, strerror(errno));
         return NULL;
     }
 
     if (!(file = PyFile_FromFile(fp, filename, "rb", NULL)))
     {
-        PyErr_SetFromErrno(PycError);
+        PyErr_SetString(PycError, strerror(errno));
         return NULL;
     }
 
