@@ -358,7 +358,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
     /* FIXME: add a param to autocheck / time based check of the db */
     if (!pyci_root && (ret = pyci_loadDB()))
     {
-        PyErr_PycFromErrno(pyc_scanDesc);
+        PyErr_PycFromClamav(pyc_scanDesc, ret);
         return NULL;
     }
 
