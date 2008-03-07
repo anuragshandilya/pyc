@@ -59,7 +59,18 @@ typedef signed   __int8  int8_t;
 #endif
 
 #define PyErr_PycFromErrno(func) \
-    PyErr_SetObject(PycError, PyString_FromFormat(#func": %s", strerror(errno)))
+    PyErr_SetObject(PycError, PyString_FromFormat(#func ": %s", strerror(errno)))
+
+#define PyErr_PycFromClamav(func, ret) \
+    PyErr_SetObject(PycError, PyString_FromFormat(#func ": %s", cl_strerror(ret)))
+
+/* #define PYC_DEBUG */
+
+#ifdef PYC_DEBUG
+#define pyc_DEBUG(func, fmt, ...) fprintf(stderr, "[PycDEBUG] " #func ": "fmt, ##__VA_ARGS__)
+#else
+#define pyc_DEBUG(func, fmt, ...)
+#endif
 
 #define PYC_VERSION "1.0"
 
@@ -91,14 +102,18 @@ static const options_t optlist[] =
 
 static unsigned int sigs = 0;
 static unsigned int vmain = 0, vdaily = 0;
-static char dbPath[MAX_PATH + 1] = "";
+static char pyci_dbpath[MAX_PATH + 1] = "";
 
 static struct cl_node  *pyci_root = NULL;
+static struct cl_stat  *pyci_dbstat = NULL;
 static struct cl_limits pyci_limits;
 static uint32_t pyci_options = CL_SCAN_STDOPT;
 
 static PyObject *PycError;
 static PyGILState_STATE gstate;
+
+static int pyci_dbstatNew(void);
+static void pyci_dbstatFree(void);
 
 /* Private */
 static int pyci_getVersion(const char *name)
@@ -107,17 +122,16 @@ static int pyci_getVersion(const char *name)
     struct cl_cvd *cvd = NULL;
     unsigned int dbver = 0;
 
-    snprintf(path, MAX_PATH, "%s/%s.cvd", dbPath, name);
+    snprintf(path, MAX_PATH, "%s/%s.cvd", pyci_dbpath, name);
     path[MAX_PATH] = 0;
 
     if (access(path, R_OK) < 0)
     {
-        snprintf(path, MAX_PATH, "%s/%s.cld", dbPath, name, name);
+        snprintf(path, MAX_PATH, "%s/%s.cld", pyci_dbpath, name, name);
         path[MAX_PATH] = 0;
     }
 
-    /* Don't bother spamming messages, perhaps the result should be unsigned */
-    if (access(path, R_OK) < 0) return -1;
+    if (access(path, R_OK) < 0) return dbver;
 
     if ((cvd = cl_cvdhead(path)))
     {
@@ -139,8 +153,11 @@ static void pyci_getVersions(unsigned int *main, unsigned int *daily)
 static void pyci_setDBPath(const char *path)
 {
     gstate = PyGILState_Ensure();
-    strncpy(dbPath, path, MAX_PATH);
-    dbPath[MAX_PATH] = 0;
+    strncpy(pyci_dbpath, path, MAX_PATH);
+    pyci_dbpath[MAX_PATH] = 0;
+    if (pyci_root) cl_free(pyci_root);
+    pyci_root = NULL;
+    pyci_dbstatFree();
     PyGILState_Release(gstate);
 }
 
@@ -158,9 +175,12 @@ static int pyci_loadDB(void)
         pyci_root = NULL;
     }
 
-    if ((ret = cl_load(dbPath, &pyci_root, &sigs, CL_DB_STDOPT)))
+    pyc_DEBUG(pyci_loadDB, "Loading db from %s\n", pyci_dbpath);
+
+    if ((ret = cl_load(pyci_dbpath, &pyci_root, &sigs, CL_DB_STDOPT)))
     {
         pyci_root = NULL;
+        pyc_DEBUG(pyci_loadDB, "cl_load() failed %s\n", cl_strerror(ret));
         goto cleanup;
     }
 
@@ -168,32 +188,75 @@ static int pyci_loadDB(void)
     {
         cl_free(pyci_root);
         pyci_root = NULL;
+        pyc_DEBUG(pyci_loadDB, "cl_build() failed %s\n", cl_strerror(ret));
         goto cleanup;
     }
 
+    ret = pyci_dbstatNew();
  cleanup:
     PyGILState_Release(gstate);
-    pyci_getVersions(&vmain, &vdaily);
+    if (!ret) pyci_getVersions(&vmain, &vdaily);
     return ret;
 }
 
-/* FIXME: Use db dir stat functions */
-static int pyci_checkDB(void)
+static void pyci_dbstatFree(void)
 {
-    unsigned int dbmain = 0, dbdaily = 0;
+    if (!pyci_dbstat) return;
+    cl_statfree(pyci_dbstat);
+    PyMem_Free(pyci_dbstat);
+    pyci_dbstat = NULL;
+}
 
-    if (!pyci_root) return pyci_loadDB();
+static int pyci_dbstatNew(void)
+{
+    int ret;
+    if (pyci_dbstat) pyci_dbstatFree();
 
-    pyci_getVersions(&dbmain, &dbdaily);
+    if (!(pyci_dbstat = PyMem_Malloc(sizeof(pyci_dbstat))))
+    {
+        pyc_DEBUG(pyci_dbstatNew, "Out of memory\n");
+        return CL_EMEM;
+    }
 
-    if ((dbmain != vmain) || (dbdaily != vdaily))
-        return pyci_loadDB();
+    pyc_DEBUG(pyci_dbstatNew, "Calling cl_statinidir() using %s\n", pyci_dbpath);
+    if ((ret = cl_statinidir(pyci_dbpath, pyci_dbstat)))
+    {
+        pyc_DEBUG(pyci_dbstatNew, "cl_statinidir() failed %s\n", cl_strerror(ret));
+        PyMem_Free(pyci_dbstat);
+        return ret;
+    }
+    return CL_SUCCESS;
+}
 
-    return 0;
+static int pyci_checkAndLoadDB(void)
+{
+    int ret;
+
+    if (!pyci_dbstat && (ret = pyci_dbstatNew()))
+        return ret;
+
+    switch ((ret = cl_statchkdir(pyci_dbstat)))
+    {
+        case 1: /* needs to be reloaded */
+            pyc_DEBUG(pyci_checkAndLoadDB, "virus db needs to be reloaded\n");
+            break;
+        case CL_SUCCESS:
+            pyc_DEBUG(pyci_checkAndLoadDB, "virus db is up to date\n");
+            return CL_SUCCESS;
+        default:
+            pyc_DEBUG(pyci_checkAndLoadDB, "cl_statchkdir() failed %s\n", cl_strerror(ret));
+            return ret;
+    }
+
+    if ((ret = pyci_loadDB()))
+        return ret;
+
+    return CL_SUCCESS;
 }
 
 static void pyci_cleanup(void)
 {
+    pyci_dbstatFree();
     if (pyci_root) cl_free(pyci_root);
 }
 
@@ -202,7 +265,7 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 {
     const char *version = NULL;
 
-    if (!(pyci_root && vmain && vdaily))
+    if (!pyci_root)
     {
         PyErr_SetString(PycError, "pyc_getVersions: No database loaded");
         return NULL;
@@ -212,24 +275,30 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
     return Py_BuildValue("(s,i,i,i)", version, vmain, vdaily, sigs);
 }
 
-/* FIXME: invalidate the db */
 static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 {
     char *path = NULL;
+    struct stat dp;
+
     if (!PyArg_ParseTuple(args, "s", &path))
     {
         PyErr_SetString(PycError, "pyc_setDBPath: Database path must be a String");
         return NULL;
     }
 
-    pyci_setDBPath(path);
+    if (stat(path, &dp) < 0)
+    {
+        PyErr_PycFromErrno(pyc_scanDesc);
+        return NULL;
+    }
 
+    pyci_setDBPath(path);
     Py_RETURN_NONE;
 }
 
 static PyObject *pyc_getDBPath(PyObject *self, PyObject *args)
 {
-    return PyString_FromString(dbPath);
+    return PyString_FromString(pyci_dbpath);
 }
 
 static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
@@ -254,9 +323,9 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
         }
     }
 
-    if ((ret = pyci_loadDB()))
+    if ((ret = pyci_checkAndLoadDB()))
     {
-        PyErr_PycFromErrno(pyc_loadDB);
+        PyErr_PycFromClamav(pyc_loadDB, ret);
         return NULL;
     }
 
@@ -286,7 +355,8 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if ((ret = pyci_checkDB()))
+    /* FIXME: add a param to autocheck / time based check of the db */
+    if (!pyci_root && (ret = pyci_loadDB()))
     {
         PyErr_PycFromErrno(pyc_scanDesc);
         return NULL;
@@ -302,7 +372,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
         case CL_VIRUS: return Py_BuildValue("(O,s)", Py_True,  virname);
     }
 
-    PyErr_SetObject(PycError, PyString_FromFormat("pyc_ScanDesc: %s", cl_strerror(ret)));
+    PyErr_PycFromClamav(pyc_ScanDesc, ret);
     return NULL;
 }
 
@@ -510,9 +580,8 @@ initpyc(void)
     PyDict_SetItemString(dict, "__version__", PyString_FromString(PYC_VERSION));
 
     /* Internal stuff */
-    dbPath[0] = 0;
-    strncat(dbPath, cl_retdbdir(), MAX_PATH);
-    dbPath[MAX_PATH] = 0;
+    strncat(pyci_dbpath, cl_retdbdir(), MAX_PATH);
+    pyci_dbpath[MAX_PATH] = 0;
 
     /* set up archive limits */
     pyci_limits.maxscansize   = 150 * (1 << 20);    /* 150 mb : during the scanning of archives this size will never be exceeded */
