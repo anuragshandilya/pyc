@@ -4,7 +4,8 @@ from sys import platform
 from os import environ
 
 if platform == 'win32':
-    CFLAGS = []
+    CFLAGS = [] #[ '/Zi' ]
+    LDFLAGS = [] #[ '/PDB:pyd.pdb' ]
     LIBS = []
     CLAMAVDEVROOT = environ.get('CLAMAV_DEVROOT')
     DEBUG = environ.get('CLAMAV_DEBUG', None)
@@ -18,6 +19,7 @@ if platform == 'win32':
     CLLIB = ['/'.join([CLAMAVDEVROOT, '', LIBFILE])]
 else:
     CFLAGS = [ '-Wno-long-long', '-pedantic', '-O0', '-g3' ]
+    LDFLAGS = []
     LIBS = [ 'clamav' ]
     CLINCLUDE = [ '/usr/include' ]
     CLLIB = []
@@ -26,7 +28,7 @@ pyc = Extension('pyc',
                 sources = ['pyc.c'],
                 libraries = LIBS,
                 extra_objects = CLLIB,
-                extra_link_args = [],
+                extra_link_args = LDFLAGS,
                 extra_compile_args = CFLAGS)
 
 # Build : python setup.py build
