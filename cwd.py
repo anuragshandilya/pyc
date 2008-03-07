@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- Mode: Python; tab-width: 4 -*-
 #
-# Sample Clone of Clamd using pyc extension
+# Simple Clone of Clamd using pyc extension
 #
 # Copyright (C) 2008 Gianluigi Tiesi <sherpya@netfarm.it>
 #
@@ -23,8 +23,8 @@ from select import select
 from sys import exc_info
 from tempfile import mkstemp
 from time import time
-from os import unlink, write as os_write, close as os_close
-from os.path import isfile, isdir
+from os import walk, unlink, write as os_write, close as os_close
+from os.path import isfile, isdir, join as path_join
 from sys import stdout
 import pyc
 
@@ -43,35 +43,56 @@ class CwdHandler(async_chat):
     def handle_request_line(self):
         pass
 
-    def scanfile(self, filename, name):
+    def scanfile(self, filename):
+        try:
+            infected, virus = pyc.scanFile(filename)
+        except:
+            t, val, tb = exc_info()
+            return True, 'ERROR', val.message
+        return True, infected, virus
+
+    def sendreply(self, res, name, infected, virusname):
+        try:
+            if not res:
+                print '%s: ERROR %s' % (name, virusname)
+                return self.connection.send('%s: ERROR %s\n' % (name, virusname))
+            if infected:
+                print '%s: %s FOUND' % (name, virusname)
+                self.connection.send('%s: %s FOUND\n' % (name, virusname))
+            else:
+                self.connection.send('%s: OK\n' % name)
+        except Exception, error:
+            t, val, tb = exc_info()
+            print 'Error sending reply', error
+
+    def scan(self, path, name=None, cont=False):
         ## FIXME: stat() in pyc.c does not like unc paths
         ## on win32 is almost impossible to pass an fd from py to libclamav
         ## due to crt hell with posix layer
-        if filename.startswith('\\\\?\\'):
-            filename = filename.split('\\\\?\\', 1).pop()
-        try:
-            infected, virus = pyc.scanFile(filename)
-            if infected:
-                self.connection.send('%s: %s FOUND\n' % (name, virus))
-                print '%s: %s FOUND' % (name, virus)
-            else:
-                self.connection.send('%s: OK\n' % name)
-        except:
-            t, val, tb = exc_info()
-            print '%s: ERROR %s' % (name, val.message)
-            self.connection.send('%s: ERROR %s\n' % (name, val.message))
+        if path.startswith('\\\\?\\'):
+            path = path.split('\\\\?\\', 1).pop()
 
-    def scandir(self, path):
-        self.connection.send('%s: ERROR directory recursion not implemented\n' % path)
-
-    def scan(self, path, name=None):
-        if name is not None: return self.scanfile(path, name)
-        if isfile(path): return self.scanfile(path, path)
-        if isdir(path): return self.scandir(path)
-        self.connection.send('%s: ERROR not a regular file or a directory\n' % path)
+        if (name is not None):
+            res, infected, virusname = self.scanfile(path)
+            return self.sendreply(res, name, infected, virusname)
+        elif isfile(path):
+            res, infected, virusname = self.scanfile(path)
+            return self.sendreply(res, path, infected, virusname)
+        elif isdir(path):
+            #print 'Walking', path
+            for f in walk(path):
+                for child in f[2]:
+                    filename = path_join(f[0], child)
+                    #print 'Scanning', filename
+                    res, infected, virusname = self.scanfile(filename)
+                    self.sendreply(res, filename, infected, virusname)
+                    if not cont: return
+        else:
+            self.connection.send('%s: ERROR not a regular file or directory\n' % path)
 
     def collect_incoming_data(self, cmd):
         client = self.connection.getpeername()
+        print 'Connection from:', client[0]
         cmd = cmd.strip()
         if cmd.startswith('SCAN '):
             self.do_SCAN(cmd.split('SCAN ', 1).pop())
@@ -117,7 +138,7 @@ class CwdHandler(async_chat):
         self.connection.send('PONG\n')
 
     def do_CONTSCAN(self, path):
-        self.scan(path)
+        self.scan(path, cont=True)
 
     def do_VERSION(self):
         version = pyc.getVersions()[0]
