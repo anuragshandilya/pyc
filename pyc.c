@@ -579,18 +579,17 @@ initpyc(void)
 
     PyDict_SetItemString(dict, "__version__", PyString_FromString(PYC_VERSION));
 
-    /* Internal stuff */
     strncat(pyci_dbpath, cl_retdbdir(), MAX_PATH);
     pyci_dbpath[MAX_PATH] = 0;
 
     /* set up archive limits */
-    pyci_limits.maxscansize   = 150 * (1 << 20);    /* 150 mb : during the scanning of archives this size will never be exceeded */
-    pyci_limits.maxfilesize   = 100 * (1 << 20);    /* 100 mb : compressed files will only be decompressed and scanned up to this size */
+    pyci_limits.maxscansize   = 150 * (1 << 20);     /* 150 mb : during the scanning of archives this size will never be exceeded */
+    pyci_limits.maxfilesize   = 100 * (1 << 20);     /* 100 mb : compressed files will only be decompressed and scanned up to this size */
     pyci_limits.maxreclevel   = 15;                  /* maximum recursion level for archives */
     pyci_limits.maxfiles      = 10000;               /* maximum number of files to be scanned within a single archive */
     pyci_limits.archivememlim = 0;                   /* limit memory usage for some unpackers */
 
-    Py_AtExit(pyci_cleanup); /* I need to free pyci_root */
+    Py_AtExit(pyci_cleanup);
 }
 
 int main(int argc, char *argv[])
