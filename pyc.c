@@ -66,7 +66,7 @@ typedef signed   __int8  int8_t;
 #define PyErr_PycFromClamav(func, ret) \
     PyErr_SetObject(PycError, PyString_FromFormat(#func ": %s", cl_strerror(ret)))
 
-#define PYC_DEBUG
+/* #define PYC_DEBUG */
 
 #ifdef PYC_DEBUG
 #define pyc_DEBUG(func, fmt, ...) fprintf(stderr, "[PycDEBUG] " #func ": "fmt, ##__VA_ARGS__)
