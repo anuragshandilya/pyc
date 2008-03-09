@@ -66,7 +66,7 @@ typedef signed   __int8  int8_t;
 #define PyErr_PycFromClamav(func, ret) \
     PyErr_SetObject(PycError, PyString_FromFormat(#func ": %s", cl_strerror(ret)))
 
-/* #define PYC_DEBUG */
+#define PYC_DEBUG
 
 #ifdef PYC_DEBUG
 #define pyc_DEBUG(func, fmt, ...) fprintf(stderr, "[PycDEBUG] " #func ": "fmt, ##__VA_ARGS__)
@@ -287,6 +287,17 @@ static void pyci_cleanup(void)
 }
 
 /* Public */
+static PyObject *pyc_checkAndLoadDB(PyObject *self, PyObject *args)
+{
+    int ret;
+    if ((ret = pyci_checkAndLoadDB(0)))
+    {
+        PyErr_PycFromClamav(pyc_loadDB, ret);
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
 static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 {
     const char *version = NULL;
@@ -590,19 +601,20 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 /* Methods Table */
 static PyMethodDef pycMethods[] =
 {
-    { "getVersions",    pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
-    { "setDBPath",      pyc_setDBPath,   METH_VARARGS, "Set path for virus database"         },
-    { "getDBPath",      pyc_getDBPath,   METH_VARARGS, "Get path for virus database"         },
-    { "loadDB",         pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
-    { "setDBTimer",     pyc_setDBTimer,  METH_VARARGS, "Set database check time"             },
-    { "isLoaded",       pyc_isLoaded,    METH_VARARGS, "Check if db is loaded or not"        },
-    { "scanDesc",       pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
-    { "scanFile",       pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
-    { "setDebug",       pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
-    { "setLimits",      pyc_setLimits,   METH_VARARGS, "Set engine limits"                   },
-    { "getLimits",      pyc_getLimits,   METH_VARARGS, "Get engine limits as a Dictionary"   },
-    { "setOption",      pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
-    { "getOptions",     pyc_getOptions,  METH_VARARGS, "Get a list of enabled options"       },
+    { "getVersions",    pyc_getVersions,    METH_VARARGS, "Get clamav and database versions"    },
+    { "checkAndLoadDB", pyc_checkAndLoadDB, METH_VARARGS, "Reload virus database if changed"    },
+    { "setDBPath",      pyc_setDBPath,      METH_VARARGS, "Set path for virus database"         },
+    { "getDBPath",      pyc_getDBPath,      METH_VARARGS, "Get path for virus database"         },
+    { "loadDB",         pyc_loadDB,         METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
+    { "setDBTimer",     pyc_setDBTimer,     METH_VARARGS, "Set database check time"             },
+    { "isLoaded",       pyc_isLoaded,       METH_VARARGS, "Check if db is loaded or not"        },
+    { "scanDesc",       pyc_scanDesc,       METH_VARARGS, "Scan a file descriptor"              },
+    { "scanFile",       pyc_scanFile,       METH_VARARGS, "Scan a file"                         },
+    { "setDebug",       pyc_setDebug,       METH_VARARGS, "Enable libclamav debug messages"     },
+    { "setLimits",      pyc_setLimits,      METH_VARARGS, "Set engine limits"                   },
+    { "getLimits",      pyc_getLimits,      METH_VARARGS, "Get engine limits as a Dictionary"   },
+    { "setOption",      pyc_setOption,      METH_VARARGS, "Enable/Disable scanning options"     },
+    { "getOptions",     pyc_getOptions,     METH_VARARGS, "Get a list of enabled options"       },
     { NULL, NULL, 0, NULL }
 };
 
