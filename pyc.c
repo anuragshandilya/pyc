@@ -24,8 +24,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <assert.h>
 
 #ifdef _WIN32
 #define R_OK 4
@@ -74,6 +76,9 @@ typedef signed   __int8  int8_t;
 
 #define PYC_VERSION "1.0"
 
+#define PYC_SELFCHECK_NEVER     0
+#define PYC_SELFCHECK_ALWAYS   -1
+
 typedef struct _options_t
 {
     const char *name;
@@ -103,6 +108,8 @@ static const options_t optlist[] =
 static unsigned int sigs = 0;
 static unsigned int vmain = 0, vdaily = 0;
 static char pyci_dbpath[MAX_PATH + 1] = "";
+static time_t pyci_lastcheck = 0;
+static time_t pyci_checktimer = PYC_SELFCHECK_NEVER;
 
 static struct cl_node  *pyci_root = NULL;
 static struct cl_stat  *pyci_dbstat = NULL;
@@ -127,7 +134,7 @@ static int pyci_getVersion(const char *name)
 
     if (access(path, R_OK) < 0)
     {
-        snprintf(path, MAX_PATH, "%s/%s.cld", pyci_dbpath, name, name);
+        snprintf(path, MAX_PATH, "%s/%s.cld", pyci_dbpath, name);
         path[MAX_PATH] = 0;
     }
 
@@ -153,11 +160,14 @@ static void pyci_getVersions(unsigned int *main, unsigned int *daily)
 static void pyci_setDBPath(const char *path)
 {
     gstate = PyGILState_Ensure();
+
     strncpy(pyci_dbpath, path, MAX_PATH);
     pyci_dbpath[MAX_PATH] = 0;
+
     if (pyci_root) cl_free(pyci_root);
     pyci_root = NULL;
-    pyci_dbstatFree();
+
+    if (pyci_dbstat) pyci_dbstatFree();
     PyGILState_Release(gstate);
 }
 
@@ -193,6 +203,7 @@ static int pyci_loadDB(void)
     }
 
     ret = pyci_dbstatNew();
+    pyci_lastcheck = time(NULL);
  cleanup:
     PyGILState_Release(gstate);
     if (!ret) pyci_getVersions(&vmain, &vdaily);
@@ -201,7 +212,7 @@ static int pyci_loadDB(void)
 
 static void pyci_dbstatFree(void)
 {
-    if (!pyci_dbstat) return;
+    assert(pyci_dbstat);
     cl_statfree(pyci_dbstat);
     PyMem_Free(pyci_dbstat);
     pyci_dbstat = NULL;
@@ -212,13 +223,13 @@ static int pyci_dbstatNew(void)
     int ret;
     if (pyci_dbstat) pyci_dbstatFree();
 
-    if (!(pyci_dbstat = PyMem_Malloc(sizeof(pyci_dbstat))))
+    if (!(pyci_dbstat = PyMem_Malloc(sizeof(struct cl_stat))))
     {
         pyc_DEBUG(pyci_dbstatNew, "Out of memory\n");
         return CL_EMEM;
     }
 
-    pyc_DEBUG(pyci_dbstatNew, "Calling cl_statinidir() using %s\n", pyci_dbpath);
+    pyc_DEBUG(pyci_dbstatNew, "Calling cl_statinidir() on %s\n", pyci_dbpath);
     if ((ret = cl_statinidir(pyci_dbpath, pyci_dbstat)))
     {
         pyc_DEBUG(pyci_dbstatNew, "cl_statinidir() failed %s\n", cl_strerror(ret));
@@ -228,12 +239,30 @@ static int pyci_dbstatNew(void)
     return CL_SUCCESS;
 }
 
-static int pyci_checkAndLoadDB(void)
+static int pyci_checkAndLoadDB(int force)
 {
     int ret;
 
+    if (!pyci_root) return pyci_loadDB();
+
+    if (!force)
+    {
+        if (pyci_checktimer == PYC_SELFCHECK_NEVER) return CL_SUCCESS;
+
+        if ((pyci_checktimer > 0) || !pyci_lastcheck)
+        {
+            time_t now = time(NULL);
+            if ((now - pyci_lastcheck) < pyci_checktimer)
+                return CL_SUCCESS;
+        }
+    }
+
+    pyc_DEBUG(pyci_checkAndLoadDB, "SelfCheck\n");
+
     if (!pyci_dbstat && (ret = pyci_dbstatNew()))
         return ret;
+
+    pyci_lastcheck = time(NULL);
 
     switch ((ret = cl_statchkdir(pyci_dbstat)))
     {
@@ -248,15 +277,12 @@ static int pyci_checkAndLoadDB(void)
             return ret;
     }
 
-    if ((ret = pyci_loadDB()))
-        return ret;
-
-    return CL_SUCCESS;
+    return pyci_loadDB();
 }
 
 static void pyci_cleanup(void)
 {
-    pyci_dbstatFree();
+    if (pyci_dbstat) pyci_dbstatFree();
     if (pyci_root) cl_free(pyci_root);
 }
 
@@ -288,7 +314,7 @@ static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 
     if (stat(path, &dp) < 0)
     {
-        PyErr_PycFromErrno(pyc_scanDesc);
+        PyErr_PycFromErrno(pyc_setDBPath);
         return NULL;
     }
 
@@ -323,12 +349,25 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
         }
     }
 
-    if ((ret = pyci_checkAndLoadDB()))
+    if ((ret = pyci_checkAndLoadDB(1)))
     {
         PyErr_PycFromClamav(pyc_loadDB, ret);
         return NULL;
     }
 
+    Py_RETURN_NONE;
+}
+
+static PyObject *pyc_setDBTimer(PyObject *self, PyObject *args)
+{
+    int value = 0;
+    if (!PyArg_ParseTuple(args, "i", &value))
+    {
+        PyErr_SetString(PycError, "pyc_setDBTimer: Invalid arguments");
+        return NULL;
+    }
+
+    pyci_checktimer = value;
     Py_RETURN_NONE;
 }
 
@@ -355,8 +394,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    /* FIXME: add a param to autocheck / time based check of the db */
-    if (!pyci_root && (ret = pyci_loadDB()))
+    if ((ret = pyci_checkAndLoadDB(0)))
     {
         PyErr_PycFromClamav(pyc_scanDesc, ret);
         return NULL;
@@ -418,7 +456,7 @@ static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-#define Opt(key) if (!strcmp(opt, #key)) pyci_limits.##key = val
+#define Opt(key) if (!strcmp(opt, #key)) pyci_limits.key = val
 static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
 {
     PyObject *limits, *keyList, *item, *value, *result;
@@ -552,18 +590,19 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 /* Methods Table */
 static PyMethodDef pycMethods[] =
 {
-    { "getVersions", pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
-    { "setDBPath",   pyc_setDBPath,   METH_VARARGS, "Set path for virus database"         },
-    { "getDBPath",   pyc_getDBPath,   METH_VARARGS, "Get path for virus database"         },
-    { "loadDB",      pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
-    { "isLoaded",    pyc_isLoaded,    METH_VARARGS, "Check if db is loaded or not"        },
-    { "scanDesc",    pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
-    { "scanFile",    pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
-    { "setDebug",    pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
-    { "setLimits",   pyc_setLimits,   METH_VARARGS, "Set engine limits"                   },
-    { "getLimits",   pyc_getLimits,   METH_VARARGS, "Get engine limits as a Dictionary"   },
-    { "setOption",   pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
-    { "getOptions",  pyc_getOptions,  METH_VARARGS, "Get a list of enabled options"       },
+    { "getVersions",    pyc_getVersions, METH_VARARGS, "Get clamav and database versions"    },
+    { "setDBPath",      pyc_setDBPath,   METH_VARARGS, "Set path for virus database"         },
+    { "getDBPath",      pyc_getDBPath,   METH_VARARGS, "Get path for virus database"         },
+    { "loadDB",         pyc_loadDB,      METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
+    { "setDBTimer",     pyc_setDBTimer,  METH_VARARGS, "Set database check time"             },
+    { "isLoaded",       pyc_isLoaded,    METH_VARARGS, "Check if db is loaded or not"        },
+    { "scanDesc",       pyc_scanDesc,    METH_VARARGS, "Scan a file descriptor"              },
+    { "scanFile",       pyc_scanFile,    METH_VARARGS, "Scan a file"                         },
+    { "setDebug",       pyc_setDebug,    METH_VARARGS, "Enable libclamav debug messages"     },
+    { "setLimits",      pyc_setLimits,   METH_VARARGS, "Set engine limits"                   },
+    { "getLimits",      pyc_getLimits,   METH_VARARGS, "Get engine limits as a Dictionary"   },
+    { "setOption",      pyc_setOption,   METH_VARARGS, "Enable/Disable scanning options"     },
+    { "getOptions",     pyc_getOptions,  METH_VARARGS, "Get a list of enabled options"       },
     { NULL, NULL, 0, NULL }
 };
 
@@ -578,6 +617,9 @@ initpyc(void)
     PyDict_SetItemString(dict, "error", PycError);
 
     PyDict_SetItemString(dict, "__version__", PyString_FromString(PYC_VERSION));
+
+    PyDict_SetItemString(dict, "SELFCHECK_NEVER", PyInt_FromLong(PYC_SELFCHECK_NEVER));
+    PyDict_SetItemString(dict, "SELFCHECK_ALWAYS", PyInt_FromLong(PYC_SELFCHECK_ALWAYS));
 
     strncat(pyci_dbpath, cl_retdbdir(), MAX_PATH);
     pyci_dbpath[MAX_PATH] = 0;
