@@ -33,6 +33,11 @@
 #define R_OK 4
 #include <windows.h>
 #include <io.h>
+/* Get some help from clamav win32 specific functions */
+extern char *cw_normalizepath(const char *path);
+extern int cw_stat(const char *path, struct stat *buf);
+#define lstat stat
+#define stat(p, b) cw_stat(p, b)
 #else
 #include <unistd.h>
 #endif
@@ -323,7 +328,7 @@ static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if (stat(path, &dp) < 0)
+    if (lstat(path, &dp) < 0)
     {
         PyErr_PycFromErrno(pyc_setDBPath);
         return NULL;
@@ -438,26 +443,36 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if (stat(filename, &info) < 0)
+#ifdef _WIN32
+    if (!(filename = cw_normalizepath(filename)))
+        PyErr_SetString(PycError, "pyc_scanFile: Path Normalization failed");
+#endif
+
+    if (lstat(filename, &info) < 0)
     {
-        PyErr_PycFromErrno(pyc_scaFile);
-        return NULL;
+        PyErr_PycFromErrno(pyc_scanFile);
+        goto sf_cleanup;
     }
 
     if (!(S_ISREG(info.st_mode) || S_ISLNK(info.st_mode)))
     {
         PyErr_SetString(PycError, "pyc_scanFile: Not a regular file");
-        return NULL;
+        goto sf_cleanup;
     }
 
     if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0)
     {
         PyErr_PycFromErrno(pyc_scanFile);
-        return NULL;
+        goto sf_cleanup;
     }
 
     result = pyc_scanDesc(self, Py_BuildValue("(i)", fd));
     close(fd);
+
+ sf_cleanup:
+#ifdef _WIN32
+    if (filename) free(filename);
+#endif
     return result;
 }
 
