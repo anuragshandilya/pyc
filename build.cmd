@@ -13,12 +13,14 @@ goto usage
 
 :release
 set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Release\Win32\*.dll
+set PYTHON=python
 echo Building Release
 goto build
 
 :debug
 set DLL=%CLAMAV_DEVROOT%\contrib\msvc\Debug\Win32\*.dll
 set CLAMAV_DEBUG=yes
+set PYTHON=python_d
 echo Building Debug
 goto build
 
@@ -27,7 +29,7 @@ rd /s/q build 2>NUL:
 goto exit
 
 :build
-python setup.py build
+%PYTHON% setup.py build
 goto copylib
 
 :copylib
