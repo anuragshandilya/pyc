@@ -55,15 +55,18 @@ class CwdHandler(async_chat):
         try:
             if not res:
                 print '%s: ERROR %s' % (name, virusname)
-                return self.connection.send('%s: ERROR %s\n' % (name, virusname))
+                self.connection.send('%s: ERROR %s\n' % (name, virusname))
+                return False
             if infected:
                 print '%s: %s FOUND' % (name, virusname)
                 self.connection.send('%s: %s FOUND\n' % (name, virusname))
             else:
                 self.connection.send('%s: OK\n' % name)
+            return True
         except Exception, error:
             t, val, tb = exc_info()
             print 'Error sending reply', error
+            return False
 
     def scan(self, path, name=None, cont=False):
         ## FIXME: stat() in pyc.c does not like unc paths
@@ -79,13 +82,11 @@ class CwdHandler(async_chat):
             res, infected, virusname = self.scanfile(path)
             return self.sendreply(res, path, infected, virusname)
         elif isdir(path):
-            #print 'Walking', path
             for f in walk(path):
                 for child in f[2]:
                     filename = path_join(f[0], child)
-                    #print 'Scanning', filename
                     res, infected, virusname = self.scanfile(filename)
-                    self.sendreply(res, filename, infected, virusname)
+                    if not self.sendreply(res, filename, infected, virusname): return
                     if not cont: return
         else:
             self.connection.send('%s: ERROR not a regular file or directory\n' % path)
