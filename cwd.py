@@ -134,6 +134,7 @@ class CwdHandler(async_chat):
 
     def do_RELOAD(self):
         self.connection.send('RELOADING\n')
+        pyc.checkAndLoadDB()
 
     def do_PING(self):
         self.connection.send('PONG\n')
@@ -235,6 +236,7 @@ if __name__ == '__main__':
     port = 3310
     print 'Preloading Virus Database'
     pyc.loadDB()
+    pyc.setDBTimer(600)
     s = Server('', port, CwdHandler)
     print "Cwd Server running on port %s" % port
     try:

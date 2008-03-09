@@ -290,7 +290,7 @@ static void pyci_cleanup(void)
 static PyObject *pyc_checkAndLoadDB(PyObject *self, PyObject *args)
 {
     int ret;
-    if ((ret = pyci_checkAndLoadDB(0)))
+    if ((ret = pyci_checkAndLoadDB(1)))
     {
         PyErr_PycFromClamav(pyc_loadDB, ret);
         return NULL;
