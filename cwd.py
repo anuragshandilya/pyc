@@ -69,12 +69,6 @@ class CwdHandler(async_chat):
             return False
 
     def scan(self, path, name=None, cont=False):
-        ## FIXME: stat() in pyc.c does not like unc paths
-        ## on win32 is almost impossible to pass an fd from py to libclamav
-        ## due to crt hell with posix layer
-        if path.startswith('\\\\?\\'):
-            path = path.split('\\\\?\\', 1).pop()
-
         if (name is not None):
             res, infected, virusname = self.scanfile(path)
             return self.sendreply(res, name, infected, virusname)
