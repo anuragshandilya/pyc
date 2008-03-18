@@ -18,7 +18,7 @@ if platform == 'win32':
     CLINCLUDE = ['/'.join([CLAMAVDEVROOT, 'libclamav'])]
     CLLIB = ['/'.join([CLAMAVDEVROOT, '', LIBFILE])]
 else:
-    CFLAGS = [ '-Wno-long-long', '-pedantic', '-O0', '-g3' ] #, '-std=c99' ]
+    CFLAGS = [ '-Wall', '-O2', '-g3' ]
     LDFLAGS = [ '-L/usr/local/lib' ]
     LIBS = [ 'clamav' ]
     CLINCLUDE = [ '/usr/local/include' ]
