@@ -65,6 +65,23 @@ typedef signed   __int8  int8_t;
 #define O_BINARY (0)
 #endif
 
+#undef Py_RETURN_TRUE
+#undef Py_RETURN_FALSE
+#undef Py_RETURN_NONE
+
+/* Backward compatibility, these macro were added in 2.4 */
+#ifndef Py_RETURN_TRUE
+#define Py_RETURN_TRUE return Py_INCREF(Py_True), Py_True
+#endif
+
+#ifndef Py_RETURN_FALSE
+#define Py_RETURN_FALSE return Py_INCREF(Py_False), Py_False
+#endif
+
+#ifndef Py_RETURN_NONE
+#define Py_RETURN_NONE return Py_INCREF(Py_None), Py_None
+#endif
+
 #define PyErr_PycFromErrno(func) \
     PyErr_SetObject(PycError, PyString_FromFormat(#func ": %s", strerror(errno)))
 
@@ -73,10 +90,15 @@ typedef signed   __int8  int8_t;
 
 /* #define PYC_DEBUG */
 
+/* msvc6 does not support variadic macros */
+#if defined(_MSC_VER) && (_MSC_VER < 1400)
+void pyc_DEBUG(void *func, const char *fmt, ...) {}
+#else
 #ifdef PYC_DEBUG
 #define pyc_DEBUG(func, fmt, ...) fprintf(stderr, "[PycDEBUG] " #func ": "fmt, ##__VA_ARGS__)
 #else
 #define pyc_DEBUG(func, fmt, ...)
+#endif
 #endif
 
 #define PYC_VERSION "1.0"
