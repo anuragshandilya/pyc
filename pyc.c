@@ -36,6 +36,7 @@
 /* Get some help from clamav win32 specific functions */
 extern char *cw_normalizepath(const char *path);
 extern int cw_stat(const char *path, struct stat *buf);
+extern BOOL cw_fsredirection(BOOL value);
 #define lstat stat
 #define stat(p, b) cw_stat(p, b)
 #else
@@ -635,23 +636,50 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
     return list;
 }
 
+#ifdef _WIN32
+static PyObject *pyc_fsRedirect(PyObject *self, PyObject *args)
+{
+    PyObject *value = NULL;
+
+    if (!PyArg_ParseTuple(args, "O", &value))
+    {
+        PyErr_SetString(PyExc_TypeError, "pyc_fsRedirect: Invalid arguments");
+        return NULL;
+    }
+
+    if (!PyBool_Check(value))
+    {
+        PyErr_SetString(PyExc_TypeError, "pyc_fsRedirect: A Boolean is needed to set fs redirection");
+        return NULL;
+    }
+
+    if (cw_fsredirection((PyObject_IsTrue(value) ? TRUE : FALSE)))
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
+#endif
+
 /* Methods Table */
 static PyMethodDef pycMethods[] =
 {
-    { "getVersions",    pyc_getVersions,    METH_VARARGS, "Get clamav and database versions"    },
-    { "checkAndLoadDB", pyc_checkAndLoadDB, METH_VARARGS, "Reload virus database if changed"    },
-    { "setDBPath",      pyc_setDBPath,      METH_VARARGS, "Set path for virus database"         },
-    { "getDBPath",      pyc_getDBPath,      METH_VARARGS, "Get path for virus database"         },
-    { "loadDB",         pyc_loadDB,         METH_VARARGS|METH_KEYWORDS, "Load a virus database" },
-    { "setDBTimer",     pyc_setDBTimer,     METH_VARARGS, "Set database check time"             },
-    { "isLoaded",       pyc_isLoaded,       METH_VARARGS, "Check if db is loaded or not"        },
-    { "scanDesc",       pyc_scanDesc,       METH_VARARGS, "Scan a file descriptor"              },
-    { "scanFile",       pyc_scanFile,       METH_VARARGS, "Scan a file"                         },
-    { "setDebug",       pyc_setDebug,       METH_VARARGS, "Enable libclamav debug messages"     },
-    { "setLimits",      pyc_setLimits,      METH_VARARGS, "Set engine limits"                   },
-    { "getLimits",      pyc_getLimits,      METH_VARARGS, "Get engine limits as a Dictionary"   },
-    { "setOption",      pyc_setOption,      METH_VARARGS, "Enable/Disable scanning options"     },
-    { "getOptions",     pyc_getOptions,     METH_VARARGS, "Get a list of enabled options"       },
+    { "getVersions",    pyc_getVersions,    METH_VARARGS, "Get clamav and database versions"        },
+    { "checkAndLoadDB", pyc_checkAndLoadDB, METH_VARARGS, "Reload virus database if changed"        },
+    { "setDBPath",      pyc_setDBPath,      METH_VARARGS, "Set path for virus database"             },
+    { "getDBPath",      pyc_getDBPath,      METH_VARARGS, "Get path for virus database"             },
+    { "loadDB",         pyc_loadDB,         METH_VARARGS|METH_KEYWORDS, "Load a virus database"     },
+    { "setDBTimer",     pyc_setDBTimer,     METH_VARARGS, "Set database check time"                 },
+    { "isLoaded",       pyc_isLoaded,       METH_VARARGS, "Check if db is loaded or not"            },
+    { "scanDesc",       pyc_scanDesc,       METH_VARARGS, "Scan a file descriptor"                  },
+    { "scanFile",       pyc_scanFile,       METH_VARARGS, "Scan a file"                             },
+    { "setDebug",       pyc_setDebug,       METH_VARARGS, "Enable libclamav debug messages"         },
+    { "setLimits",      pyc_setLimits,      METH_VARARGS, "Set engine limits"                       },
+    { "getLimits",      pyc_getLimits,      METH_VARARGS, "Get engine limits as a Dictionary"       },
+    { "setOption",      pyc_setOption,      METH_VARARGS, "Enable/Disable scanning options"         },
+    { "getOptions",     pyc_getOptions,     METH_VARARGS, "Get a list of enabled options"           },
+#ifdef _WIN32
+    { "fsRedirect",     pyc_fsRedirect,     METH_VARARGS, "Enable / Disable Win64 fs redirection"   },
+#endif
     { NULL, NULL, 0, NULL }
 };
 
