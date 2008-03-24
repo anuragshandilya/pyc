@@ -37,6 +37,7 @@
 extern char *cw_normalizepath(const char *path);
 extern int cw_stat(const char *path, struct stat *buf);
 extern BOOL cw_fsredirection(BOOL value);
+extern BOOL cw_iswow64(void);
 #define lstat stat
 #define stat(p, b) cw_stat(p, b)
 #else
@@ -658,6 +659,14 @@ static PyObject *pyc_fsRedirect(PyObject *self, PyObject *args)
     else
         Py_RETURN_FALSE;
 }
+
+static PyObject *pyc_isWow64(PyObject *self, PyObject *args)
+{
+    if (cw_iswow64())
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
 #endif
 
 /* Methods Table */
@@ -679,6 +688,7 @@ static PyMethodDef pycMethods[] =
     { "getOptions",     pyc_getOptions,     METH_VARARGS, "Get a list of enabled options"           },
 #ifdef _WIN32
     { "fsRedirect",     pyc_fsRedirect,     METH_VARARGS, "Enable / Disable Win64 fs redirection"   },
+    { "isWow64",        pyc_isWow64,        METH_VARARGS, "Check if we are running on wow"          },
 #endif
     { NULL, NULL, 0, NULL }
 };
