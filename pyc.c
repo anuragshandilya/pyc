@@ -592,22 +592,28 @@ static PyObject *pyc_getLimits(PyObject *self, PyObject *args)
 static PyObject *pyc_setOption(PyObject *self, PyObject *args)
 {
     char *option = NULL;
-    uint32_t value = 0;
+    PyObject *value = NULL;
     int i;
 
-    if (!PyArg_ParseTuple(args, "si", &option, &value))
+    if (!PyArg_ParseTuple(args, "sO", &option, &value))
     {
         PyErr_SetString(PyExc_TypeError, "pyc_setOption: Invalid arguments");
         return NULL;
     }
 
+    if (!PyBool_Check(value))
+    {
+        PyErr_SetString(PyExc_TypeError, "pyc_setOption: A Boolean is needed as option value");
+        return NULL;
+    }
+    
     gstate = PyGILState_Ensure();
 
     for (i = 0; optlist[i].name; i++)
     {
         if (strcmp(option, optlist[i].name)) continue;
 
-        if (value)
+        if (PyObject_IsTrue(value))
             pyci_options |= optlist[i].value;
         else
             pyci_options &= ~optlist[i].value;
