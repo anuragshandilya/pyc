@@ -240,11 +240,18 @@ class CwConfig:
         raise Exception, 'Bad value for boolean'
 
     def size_t(value):
+        try:
+            return long(value) # no modifier: bytes
+        except:
+            pass
         size = value[:-1]
         mod = value[-1].lower()
-        if mod not in [ 'm', 'k' ]:
+        if mod == 'k':
+            return long(size) * 1024
+        elif mod == 'm':
+            return long(size) * 1024 * 1024
+        else:
             raise Exception, 'Bad Modifier'
-        return long(size) 
 
     ignore = [ 'LogFile', 'LogFileUnlock', 'LogFileMaxSize',
         'LogTime', 'LogClean', 'LogSyslog', 'LogFacility',
@@ -265,7 +272,7 @@ class CwConfig:
         'TCPSocket'                 : [ int, 3310 ],
         'TCPAddr'                   : [ nqstr, 'localhost' ],
         'MaxConnectionQueueLength'  : [ int, 5 ],
-        'StreamMaxLength'           : [ size_t, 100 ], # MB
+        'StreamMaxLength'           : [ size_t, 100 * 1024 * 1024 ], # MB
         'ReadTimeout'               : [ int, 300 ], # seconds
         'MaxDirectoryRecursion'     : [ int, 15 ],
         'SelfCheck'                 : [ int, 3600 ], # seconds
@@ -278,8 +285,8 @@ class CwConfig:
         'ScanMail'                  : [ boolean, True ],
         'ScanHTML'                  : [ boolean, True ],
         'ScanArchive'               : [ boolean, True ],
-        'MaxScanSize'               : [ size_t, 150 ], # MB
-        'MaxFileSize'               : [ size_t, 100 ], # MB
+        'MaxScanSize'               : [ size_t, 150 * 1024 * 1024 ], # MB
+        'MaxFileSize'               : [ size_t, 100 * 1024 * 1024 ], # MB
         'MaxRecursion'              : [ int, 16 ],
         'MaxFiles'                  : [ int, 15000 ]
     }
@@ -302,6 +309,8 @@ class CwConfig:
                 value = self.options[option][0](value)
             except Exception, e:
                 print e.message, 'for option', option
+                f.close()
+                raise Exception, 'Invalid configuration'
             self[option] = value
         f.close()
 
