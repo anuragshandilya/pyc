@@ -291,6 +291,7 @@ class CwConfig:
             if (len(line) == 0) or line.startswith('#'):
                 continue
             if line.startswith('Example'):
+                f.close()
                 raise Exception, 'You should edit the default config and remove Example keyword'
             option, value = line.split(' ', 1)
             if option in self.ignore: continue
@@ -302,6 +303,7 @@ class CwConfig:
             except:
                 print 'Invalid value', value, 'for option', option
             self[option] = value
+        f.close()
 
 class CwServer(dispatcher):
     def __init__(self, configfile=None):
@@ -331,7 +333,7 @@ class CwServer(dispatcher):
 
 if __name__ == '__main__':
     print 'Preloading Virus Database'
-    s = CwServer('c:/clamav/clamd.conf')
+    s = CwServer('clamd.conf')
     print "Cwd Server running on port %s" % s.port
     try:
         loop(timeout=1)
