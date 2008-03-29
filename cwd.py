@@ -300,8 +300,8 @@ class CwConfig:
                 continue
             try:
                 value = self.options[option][0](value)
-            except:
-                print 'Invalid value', value, 'for option', option
+            except Exception, e:
+                print e.message, 'for option', option
             self[option] = value
         f.close()
 
