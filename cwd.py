@@ -20,12 +20,11 @@ from asynchat import async_chat
 from asyncore import dispatcher, loop
 from socket import socket, AF_INET, SOCK_STREAM
 from select import select
-from sys import exc_info
+from sys import stdout, exc_info, exit as sys_exit
 from tempfile import mkstemp
 from time import time
 from os import walk, unlink, write as os_write, close as os_close
 from os.path import isfile, isdir, join as path_join
-from sys import stdout
 import pyc
 
 class CwdHandler(async_chat):
@@ -209,30 +208,131 @@ class CwdHandler(async_chat):
     def do_MULTISCAN(self, filename):
         self.connection.send('ERROR Not implemented\n')
 
-class Server(dispatcher):
-    def __init__(self, ip, port, handler, timeout=300):
-        self.ip = ip
-        self.port = port
-        self.handler = handler
-        self.timeout = timeout
+class CwConfig:
+    def __init__(self):
+        self.config = {}
+        for opt in self.options.keys():
+            self[opt] = self.options[opt][1]
+
+    def __setitem__(self, name, value):
+        self.config[name] = value
+
+    def __getitem__(self, name):
+        return self.config[name]
+
+    def qstr(value):
+        if value[0] == '"' and value[-1] == '"':
+            return value[1:-1]
+        else:
+            return value
+
+    def nqstr(value):
+        if value.find(' ') != -1:
+            raise Exception, 'Invalid space in value'
+        return value
+
+    def boolean(value):
+        value = value.lower()
+        if value in [ 'true', '1', 'yes' ]:
+            return True
+        if value in [ 'false', '0', 'no' ]:
+            return False
+        raise Exception, 'Bad value for boolean'
+
+    def size_t(value):
+        size = value[:-1]
+        mod = value[-1].lower()
+        if mod not in [ 'm', 'k' ]:
+            raise Exeption, 'Bad Modifier'
+        return long(size) 
+
+    ignore = [ 'LogFile', 'LogFileUnlock', 'LogFileMaxSize',
+        'LogTime', 'LogClean', 'LogSyslog', 'LogFacility',
+        'LogVerbose', 'PidFile', 'TemporaryDirectory',
+        'LocalSocket', 'FixStaleSocket',
+        'StreamMinPort', 'StreamMaxPort',
+        'MaxThreads', 'IdleTimeout', 'FollowDirectorySymlinks',
+        'FollowFileSymlinks', 'VirusEvent',
+        'User', 'AllowSupplementaryGroups', 'ExitOnOOM',
+        'Foreground', 'LeaveTemporaryFiles', 'DetectPUA',
+        'AlgorithmicDetection', 'MailFollowURLs',
+        'PhishingSignatures', 'PhishingScanURLs',
+        'PhishingAlwaysBlockSSLMismatch', 'PhishingAlwaysBlockCloak',
+        'ArchiveLimitMemoryUsage', 'ArchiveBlockEncrypted' ]
+
+    options = {
+        'DatabaseDirectory'         : [ qstr, None ],
+        'TCPSocket'                 : [ int, 3310 ],
+        'TCPAddr'                   : [ nqstr, 'localhost' ],
+        'MaxConnectionQueueLength'  : [ int, 5 ],
+        'StreamMaxLength'           : [ size_t, 100 ], # MB
+        'ReadTimeout'               : [ int, 300 ], # seconds
+        'MaxDirectoryRecursion'     : [ int, 15 ],
+        'SelfCheck'                 : [ int, 3600 ], # seconds
+        'Debug'                     : [ boolean, False ],
+        'ScanPE'                    : [ boolean, True ],
+        'ScanELF'                   : [ boolean, True ],
+        'DetectBrokenExecutables'   : [ boolean, False ],
+        'ScanOLE2'                  : [ boolean, True ],
+        'ScanPDF'                   : [ boolean, False ],
+        'ScanMail'                  : [ boolean, True ],
+        'ScanHTML'                  : [ boolean, True ],
+        'ScanArchive'               : [ boolean, True ],
+        'MaxScanSize'               : [ size_t, 150 ], # MB
+        'MaxFileSize'               : [ size_t, 100 ], # MB
+        'MaxRecursion'              : [ int, 16 ],
+        'MaxFiles'                  : [ int, 15000 ]
+    }
+
+    def load(self, filename):
+        f = open(filename)
+        for line in f:
+            line = line.strip()
+            if (len(line) == 0) or line.startswith('#'):
+                continue
+            if line.startswith('Example'):
+                raise Exception, 'You should edit the default config and remove Example keyword'
+            option, value = line.split(' ', 1)
+            if option in self.ignore: continue
+            if not self.options.has_key(option):
+                print 'Ignoring Unknown option', option
+                continue
+            try:
+                value = self.options[option][0](value)
+            except:
+                print 'Invalid value', value, 'for option', option
+            self[option] = value
+
+class CwServer(dispatcher):
+    def __init__(self, configfile=None):
+        self.handler = CwdHandler
         self.sessions = []
+        self.ip = 'localhost'
+        self.port = 0
         dispatcher.__init__(self)
+
+        self.config = CwConfig()
+        if configfile: self.config.load(configfile)
+        pyc.setDBPath(self.config['DatabaseDirectory'])
+        pyc.loadDB()
+        pyc.setDBTimer(self.config['SelfCheck'])
+        self.startup()
+
+    def startup(self):
         self.create_socket(AF_INET, SOCK_STREAM)
         self.set_reuse_addr()
-        self.bind((ip, port))
-        self.listen(5)
+        self.ip, self.port = self.config['TCPAddr'], self.config['TCPSocket']
+        self.bind((self.ip, self.port))
+        self.listen(self.config['MaxConnectionQueueLength'])
 
     def handle_accept(self):
         conn, addr = self.accept()
         self.handler(conn, addr, self)
 
 if __name__ == '__main__':
-    port = 3310
     print 'Preloading Virus Database'
-    pyc.loadDB()
-    pyc.setDBTimer(600)
-    s = Server('', port, CwdHandler)
-    print "Cwd Server running on port %s" % port
+    s = CwServer('c:/clamav/clamd.conf')
+    print "Cwd Server running on port %s" % s.port
     try:
         loop(timeout=1)
     except KeyboardInterrupt:
