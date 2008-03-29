@@ -243,7 +243,7 @@ class CwConfig:
         size = value[:-1]
         mod = value[-1].lower()
         if mod not in [ 'm', 'k' ]:
-            raise Exeption, 'Bad Modifier'
+            raise Exception, 'Bad Modifier'
         return long(size) 
 
     ignore = [ 'LogFile', 'LogFileUnlock', 'LogFileMaxSize',
