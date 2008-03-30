@@ -380,7 +380,6 @@ class CwServer(dispatcher):
         self.handler(conn, addr, self)
 
 if __name__ == '__main__':
-    print 'Preloading Virus Database'
     s = CwServer('clamd.conf')
     print "Cwd Server running on port %s" % s.port
     try:
