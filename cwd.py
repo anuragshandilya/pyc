@@ -16,10 +16,6 @@
 # for more details.
 # ======================================================================
 
-# TODO:
-# - pass and check stream size limit
-# - pass and set timeout
-
 from asynchat import async_chat
 from asyncore import dispatcher, loop
 from socket import socket, AF_INET, SOCK_STREAM
@@ -145,7 +141,7 @@ class CwdHandler(async_chat):
 
     def do_STREAM(self):
         stream = socket(AF_INET, SOCK_STREAM)
-        stream.settimeout(self.server.timeout)
+        stream.settimeout(self.server.config['ReadTimeout'])
         stream.bind((self.server.ip, 0))
         stream.listen(1)
         self.connection.send('PORT %d\n' % stream.getsockname()[1])
@@ -158,13 +154,14 @@ class CwdHandler(async_chat):
             stream.close()
             return
 
-        f, filename = mkstemp()
-        s = time()
+        f, filename = mkstemp(dir=self.server.config['TemporaryDirectory'])
+        start = time()
         ok = True
+        bytes = 0
         while True:
             r, w, e = select([conn], [], [], 1)
-            n = time()
-            if (n - s) > self.server.timeout:
+            now = time()
+            if (now - start) > self.server.config['ReadTimeout']:
                 print 'Connection Timeout'
                 self.connection.send('stream: ERROR timeout\n')
                 ok = False
@@ -173,8 +170,14 @@ class CwdHandler(async_chat):
                 try:
                     d = conn.recv(4096)
                     if not d: break
+                    bytes = bytes + len(d)
+                    if bytes > self.server.config['StreamMaxLength']:
+                        print 'ScanStream: StreamMaxLength reached (max: %s)' % self.server.config['StreamMaxLength']
+                        self.connection.send('stream: ERROR StreamMaxLength reached\n')
+                        ok = False
+                        break
                     os_write(f, d)
-                    s = n
+                    start = now
                 except Exception, error:
                     print 'Error Recv', error
                     self.connection.send('stream: ERROR %s\n' % error)
@@ -192,10 +195,11 @@ class CwdHandler(async_chat):
 
         if ok: self.scan(filename, 'stream')
 
-        try:
-            unlink(filename)
-        except:
-            print 'Error unlinking tempfile'
+        if not self.server.config['LeaveTemporaryFiles']:
+            try:
+                unlink(filename)
+            except:
+                print 'Error unlinking tempfile'
 
     def do_SESSION(self, client):
         if client in self.server.sessions:
@@ -259,13 +263,13 @@ class CwConfig:
 
     ignore = [ 'LogFile', 'LogFileUnlock', 'LogFileMaxSize',
         'LogTime', 'LogClean', 'LogSyslog', 'LogFacility',
-        'LogVerbose', 'PidFile', 'TemporaryDirectory',
+        'LogVerbose', 'PidFile',
         'LocalSocket', 'FixStaleSocket',
         'StreamMinPort', 'StreamMaxPort',
         'MaxThreads', 'IdleTimeout', 'FollowDirectorySymlinks',
         'FollowFileSymlinks', 'VirusEvent',
         'User', 'AllowSupplementaryGroups', 'ExitOnOOM',
-        'Foreground', 'LeaveTemporaryFiles', 'DetectPUA',
+        'Foreground', 'DetectPUA',
         'AlgorithmicDetection', 'MailFollowURLs',
         'PhishingSignatures', 'PhishingScanURLs',
         'PhishingAlwaysBlockSSLMismatch', 'PhishingAlwaysBlockCloak',
@@ -273,6 +277,8 @@ class CwConfig:
 
     options = {
         'DatabaseDirectory'         : [ qstr, None ],
+        'TemporaryDirectory'        : [ qstr, None ],
+        'LeaveTemporaryFiles'       : [ boolean, False],
         'TCPSocket'                 : [ int, 3310 ],
         'TCPAddr'                   : [ nqstr, 'localhost' ],
         'MaxConnectionQueueLength'  : [ int, 5 ],
@@ -324,7 +330,10 @@ class CwConfig:
             limits[lim] = self[cwdlim]
         pyc.setLimits(limits)
 
-        pyc.setDBPath(self['DatabaseDirectory'])
+        if self['DatabaseDirectory'] is not None:
+            pyc.setDBPath(self['DatabaseDirectory'])
+
+        pyc.setTempdir(self['TemporaryDirectory'], self['LeaveTemporaryFiles'])
         pyc.setDBTimer(self['SelfCheck'])
 
     def load(self, filename):
@@ -349,7 +358,6 @@ class CwConfig:
                 raise Exception, 'Invalid configuration'
             self[option] = value
         f.close()
-        self.engage()
 
 class CwServer(dispatcher):
     def __init__(self, configfile=None):
@@ -362,8 +370,7 @@ class CwServer(dispatcher):
         self.config = CwConfig()
         if configfile:
             self.config.load(configfile)
-        else:
-            self.engage()
+        self.config.engage()
 
         pyc.loadDB()
         self.startup()
