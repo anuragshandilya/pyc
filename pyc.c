@@ -646,7 +646,6 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
 static PyObject *pyc_setTempdir(PyObject *self, PyObject *args)
 {
     PyObject *directory, *leavetemps;
-    short lt;
     char *dir = NULL;
 
     if (!PyArg_ParseTuple(args, "OO", &directory, &leavetemps))
@@ -667,7 +666,6 @@ static PyObject *pyc_setTempdir(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    lt = (PyObject_IsTrue(leavetemps) ? 1 : 0);
 
     if (directory != Py_None)
     {
@@ -687,7 +685,7 @@ static PyObject *pyc_setTempdir(PyObject *self, PyObject *args)
         }
     }
 
-    cl_settempdir(dir, lt);
+    cl_settempdir(dir, (PyObject_IsTrue(leavetemps) ? 1 : 0));
 
     Py_RETURN_NONE;
 }
