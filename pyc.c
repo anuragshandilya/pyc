@@ -606,7 +606,7 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
         PyErr_SetString(PyExc_TypeError, "pyc_setOption: A Boolean is needed as option value");
         return NULL;
     }
-    
+
     gstate = PyGILState_Ensure();
 
     for (i = 0; optlist[i].name; i++)
@@ -641,6 +641,55 @@ static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
             PyList_Append(list, PyString_FromString(optlist[i].name));
 
     return list;
+}
+
+static PyObject *pyc_setTempdir(PyObject *self, PyObject *args)
+{
+    PyObject *directory, *leavetemps;
+    short lt;
+    char *dir = NULL;
+
+    if (!PyArg_ParseTuple(args, "OO", &directory, &leavetemps))
+    {
+        PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: Invalid arguments");
+        return NULL;
+    }
+
+    if ((directory != Py_None) && !PyString_Check(directory))
+    {
+        PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: Directory argument should be a String or None");
+        return NULL;
+    }
+
+    if (!PyBool_Check(leavetemps))
+    {
+        PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: A Boolean is needed for leave temps option");
+        return NULL;
+    }
+
+    lt = (PyObject_IsTrue(leavetemps) ? 1 : 0);
+
+    if (directory != Py_None)
+    {
+        struct stat d;
+        dir = PyString_AsString(directory);
+
+        if (lstat(dir, &d) < 0)
+        {
+            PyErr_PycFromErrno(pyc_setTempdir);
+            return NULL;
+        }
+
+        if (!(S_ISDIR(d.st_mode)))
+        {
+            PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: The path specified is not a directory");
+            return NULL;
+        }
+    }
+
+    cl_settempdir(dir, lt);
+
+    Py_RETURN_NONE;
 }
 
 #ifdef _WIN32
@@ -692,6 +741,7 @@ static PyMethodDef pycMethods[] =
     { "getLimits",      pyc_getLimits,      METH_VARARGS, "Get engine limits as a Dictionary"       },
     { "setOption",      pyc_setOption,      METH_VARARGS, "Enable/Disable scanning options"         },
     { "getOptions",     pyc_getOptions,     METH_VARARGS, "Get a list of enabled options"           },
+    { "setTempdir",     pyc_setTempdir,     METH_VARARGS, "Set temporary directory"                 },
 #ifdef _WIN32
     { "fsRedirect",     pyc_fsRedirect,     METH_VARARGS, "Enable / Disable Win64 fs redirection"   },
     { "isWow64",        pyc_isWow64,        METH_VARARGS, "Check if we are running on wow"          },
