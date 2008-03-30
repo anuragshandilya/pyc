@@ -71,7 +71,7 @@ typedef signed   __int8  int8_t;
 #undef Py_RETURN_FALSE
 #undef Py_RETURN_NONE
 
-/* Backward compatibility, these macro were added in 2.4 */
+/* Backward compatibility, these macros were added in 2.4 */
 #ifndef Py_RETURN_TRUE
 #define Py_RETURN_TRUE return Py_INCREF(Py_True), Py_True
 #endif
