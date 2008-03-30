@@ -16,6 +16,10 @@
 # for more details.
 # ======================================================================
 
+# TODO:
+# - pass and check stream size limit
+# - pass and set timeout
+
 from asynchat import async_chat
 from asyncore import dispatcher, loop
 from socket import socket, AF_INET, SOCK_STREAM
@@ -241,15 +245,15 @@ class CwConfig:
 
     def size_t(value):
         try:
-            return long(value) # no modifier: bytes
+            return int(value) # no modifier: bytes
         except:
             pass
         size = value[:-1]
         mod = value[-1].lower()
         if mod == 'k':
-            return long(size) * 1024
+            return int(size) * 1024
         elif mod == 'm':
-            return long(size) * 1024 * 1024
+            return int(size) * 1024 * 1024
         else:
             raise Exception, 'Bad Modifier'
 
@@ -291,6 +295,38 @@ class CwConfig:
         'MaxFiles'                  : [ int, 15000 ]
     }
 
+    opt_pyopts = {
+        'archive'       : 'ScanArchive',
+        'mail'          : 'ScanMail',
+        'ole2'          : 'ScanOLE2',
+        'html'          : 'ScanHTML',
+        'pe'            : 'ScanPE',
+        'blockbroken'   : 'DetectBrokenExecutables',
+        'elf'           : 'ScanELF',
+        'pdf'           : 'ScanPDF'
+    }
+
+    opt_pylimits = {
+        'maxscansize'   : 'MaxScanSize',
+        'maxfilesize'   : 'MaxFileSize',
+        'maxreclevel'   : 'MaxRecursion',
+        'maxfiles'      : 'MaxFiles'
+    }
+
+    def engage(self):
+        for opt in self.opt_pyopts.keys():
+            cwdopt = self.opt_pyopts[opt]
+            pyc.setOption(opt, self[cwdopt])
+
+        limits = self.opt_pylimits.copy()
+        for lim in limits.keys():
+            cwdlim = self.opt_pylimits[lim]
+            limits[lim] = self[cwdlim]
+        pyc.setLimits(limits)
+
+        pyc.setDBPath(self['DatabaseDirectory'])
+        pyc.setDBTimer(self['SelfCheck'])
+
     def load(self, filename):
         f = open(filename)
         for line in f:
@@ -313,6 +349,7 @@ class CwConfig:
                 raise Exception, 'Invalid configuration'
             self[option] = value
         f.close()
+        self.engage()
 
 class CwServer(dispatcher):
     def __init__(self, configfile=None):
@@ -323,10 +360,12 @@ class CwServer(dispatcher):
         dispatcher.__init__(self)
 
         self.config = CwConfig()
-        if configfile: self.config.load(configfile)
-        pyc.setDBPath(self.config['DatabaseDirectory'])
+        if configfile:
+            self.config.load(configfile)
+        else:
+            self.engage()
+
         pyc.loadDB()
-        pyc.setDBTimer(self.config['SelfCheck'])
         self.startup()
 
     def startup(self):
