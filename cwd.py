@@ -90,8 +90,6 @@ class CwdHandler(async_chat):
         cmd = cmd.strip()
         if cmd.startswith('SCAN '):
             self.do_SCAN(cmd.split('SCAN ', 1).pop())
-        elif cmd.startswith('RAWSCAN '):
-            self.do_RAWSCAN(cmd.split('RAWSCAN ', 1).pop())
         elif cmd == 'QUIT' or cmd == 'SHUTDOWN':
             self.do_QUIT()
         elif cmd == 'RELOAD':
@@ -117,9 +115,6 @@ class CwdHandler(async_chat):
 
     def do_SCAN(self, path):
         self.scan(path)
-
-    def do_RAWSCAN(self, filename):
-        self.connection.send('ERROR Not implemented\n')
 
     def do_QUIT(self):
         print 'Shutdown Requested'
