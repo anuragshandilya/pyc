@@ -103,7 +103,7 @@ void pyc_DEBUG(void *func, const char *fmt, ...) {}
 #endif
 #endif
 
-#define PYC_VERSION "1.0"
+#define PYC_VERSION "Python ClamAV version 1.1"
 
 #define PYC_SELFCHECK_NEVER     0
 #define PYC_SELFCHECK_ALWAYS   -1
@@ -750,17 +750,14 @@ static PyMethodDef pycMethods[] =
 PyMODINIT_FUNC
 initpyc(void)
 {
-    PyObject *module = NULL, *dict = NULL;
-    module = Py_InitModule("pyc", pycMethods);
-    dict = PyModule_GetDict(module);
+    PyObject *m = Py_InitModule("pyc", pycMethods);
 
-    PycError = PyErr_NewException("pyc.error", NULL, NULL);
-    PyDict_SetItemString(dict, "error", PycError);
+    PycError = PyErr_NewException("pyc.PycError", NULL, NULL);
+    PyModule_AddObject(m, "PycError", PycError);
 
-    PyDict_SetItemString(dict, "__version__", PyString_FromString(PYC_VERSION));
-
-    PyDict_SetItemString(dict, "SELFCHECK_NEVER", PyInt_FromLong(PYC_SELFCHECK_NEVER));
-    PyDict_SetItemString(dict, "SELFCHECK_ALWAYS", PyInt_FromLong(PYC_SELFCHECK_ALWAYS));
+    PyModule_AddStringConstant(m, "__version__", PYC_VERSION);
+    PyModule_AddIntConstant(m, "SELFCHECK_NEVER", PYC_SELFCHECK_NEVER);
+    PyModule_AddIntConstant(m, "SELFCHECK_ALWAYS", PYC_SELFCHECK_ALWAYS);
 
     strncat(pyci_dbpath, cl_retdbdir(), MAX_PATH);
     pyci_dbpath[MAX_PATH] = 0;
