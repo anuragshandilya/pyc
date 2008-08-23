@@ -47,12 +47,12 @@ class CwdHandler(async_chat):
             infected, virus = pyc.scanFile(filename)
         except:
             t, val, tb = exc_info()
-            return True, 'ERROR', val.message
+            return None, 'ERROR', val.message
         return True, infected, virus
 
     def sendreply(self, res, name, infected, virusname):
         try:
-            if not res:
+            if res is None:
                 print '%s: ERROR %s' % (name, virusname)
                 self.connection.send('%s: ERROR %s\n' % (name, virusname))
                 return False
