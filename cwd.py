@@ -27,6 +27,8 @@ from os import walk, unlink, write as os_write, close as os_close
 from os.path import isfile, isdir, join as path_join
 import pyc
 
+raise Exception, 'Needs to be updated'
+
 class CwdHandler(async_chat):
     def __init__(self, conn, addr, server):
         async_chat.__init__(self, conn)

@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/* #define PYC_DEBUG */
+
 #include <Python.h>
 #include <clamav.h>
 #include <stdio.h>
@@ -27,6 +29,11 @@
 #include <time.h>
 #include <fcntl.h>
 #include <errno.h>
+
+#ifdef PYC_DEBUG
+#undef NDEBUG
+#endif
+
 #include <assert.h>
 
 #ifdef _WIN32
@@ -58,7 +65,7 @@ typedef signed   __int8  int8_t;
 #endif
 
 #ifndef MAX_PATH
-#define MAX_PATH 1024
+#define MAX_PATH 260
 #endif
 
 #ifndef S_ISLNK
@@ -92,7 +99,6 @@ typedef signed   __int8  int8_t;
 #define PyErr_PycFromClamav(func, ret) \
     PyErr_SetObject(PycError, PyString_FromFormat(#func ": %s", cl_strerror(ret)))
 
-/* #define PYC_DEBUG */
 
 /* msvc6 does not support variadic macros */
 #if defined(_MSC_VER) && (_MSC_VER < 1400)
@@ -105,18 +111,50 @@ void pyc_DEBUG(void *func, const char *fmt, ...) {}
 #endif
 #endif
 
-#define PYC_VERSION "Python ClamAV version 1.1"
+#define PYC_VERSION "Python ClamAV version 2.0.95"
 
 #define PYC_SELFCHECK_NEVER     0
 #define PYC_SELFCHECK_ALWAYS   -1
 
-typedef struct _options_t
+typedef enum { OPT_NONE = 0, OPT_NUM, OPT_STR } opt_t;
+
+typedef struct _engine_options_t
 {
     const char *name;
-    const uint32_t value;
-} options_t;
+    const opt_t type;
+    char readonly;
+    const uint32_t id;
+} engine_options_t;
 
-static const options_t optlist[] =
+static const engine_options_t engine_options[] =
+{
+    { "max-scansize",             OPT_NUM,  0,  CL_ENGINE_MAX_SCANSIZE      },
+    { "max-filesize",             OPT_NUM,  0,  CL_ENGINE_MAX_FILESIZE      },
+    { "max-recursion",            OPT_NUM,  0,  CL_ENGINE_MAX_RECURSION     },
+    { "max-files",                OPT_NUM,  0,  CL_ENGINE_MAX_FILES         },
+/*
+    { "structured-cc-count",      OPT_NUM,  0,  CL_ENGINE_MIN_CC_COUNT      },
+    { "structured-ssn-count",     OPT_NUM,  0,  CL_ENGINE_MIN_SSN_COUNT     },
+*/
+    { "pua-categories",           OPT_STR,  0,  CL_ENGINE_PUA_CATEGORIES    },
+    { "db-version",               OPT_NUM,  1,  CL_ENGINE_DB_VERSION        },
+    { "db-time",                  OPT_NUM,  1,  CL_ENGINE_DB_TIME           },
+    { "ac-only",                  OPT_NUM,  0,  CL_ENGINE_AC_ONLY           },
+    { "ac-mindepth",              OPT_NUM,  0,  CL_ENGINE_AC_MINDEPTH       },
+    { "ac-maxdepth",              OPT_NUM,  0,  CL_ENGINE_AC_MAXDEPTH       },
+    { "tempdir",                  OPT_STR,  0,  CL_ENGINE_TMPDIR            },
+    { "leave-temps",              OPT_NUM,  0,  CL_ENGINE_KEEPTMP           },
+
+    { NULL,                       OPT_NONE, 0,  0                           }
+};
+
+typedef struct _scan_options_t
+{
+    const char *name;
+    const uint32_t id;
+} scan_options_t;
+
+static const scan_options_t scan_options[] =
 {
     { "raw",                 CL_SCAN_RAW                 },
     { "archive",             CL_SCAN_ARCHIVE             },
@@ -142,9 +180,8 @@ static char pyci_dbpath[MAX_PATH + 1] = "";
 static time_t pyci_lastcheck = 0;
 static time_t pyci_checktimer = PYC_SELFCHECK_NEVER;
 
-static struct cl_node  *pyci_root = NULL;
+static struct cl_engine *pyci_engine = NULL;
 static struct cl_stat  *pyci_dbstat = NULL;
-static struct cl_limits pyci_limits;
 static uint32_t pyci_options = CL_SCAN_STDOPT;
 
 static PyObject *PycError;
@@ -152,13 +189,16 @@ static PyGILState_STATE gstate;
 
 static int pyci_dbstatNew(void);
 static void pyci_dbstatFree(void);
+static void pyci_freeDB(void);
+
+#define pyci_isCompiled (cl_engine_get_num(pyci_engine, CL_ENGINE_DB_OPTIONS, NULL) & CL_DB_COMPILED)
 
 /* Private */
 static int pyci_getVersion(const char *name)
 {
     char path[MAX_PATH + 1];
-    struct cl_cvd *cvd = NULL;
-    unsigned int dbver = 0;
+    struct cl_cvd *cvd;
+    unsigned int dbver;
 
     snprintf(path, MAX_PATH, "%s/%s.cvd", pyci_dbpath, name);
     path[MAX_PATH] = 0;
@@ -188,6 +228,13 @@ static void pyci_getVersions(unsigned int *main, unsigned int *daily)
     PyGILState_Release(gstate);
 }
 
+static void pyci_freeDB(void)
+{
+    if (pyci_engine)
+        cl_engine_free(pyci_engine);
+    pyci_engine = NULL;
+}
+
 static void pyci_setDBPath(const char *path)
 {
     gstate = PyGILState_Ensure();
@@ -195,47 +242,71 @@ static void pyci_setDBPath(const char *path)
     strncpy(pyci_dbpath, path, MAX_PATH);
     pyci_dbpath[MAX_PATH] = 0;
 
-    if (pyci_root) cl_free(pyci_root);
-    pyci_root = NULL;
+    pyci_freeDB();
 
-    if (pyci_dbstat) pyci_dbstatFree();
+    if (pyci_dbstat)
+        pyci_dbstatFree();
+
     PyGILState_Release(gstate);
 }
 
 static int pyci_loadDB(void)
 {
     int ret = 0;
+    struct cl_settings *settings = NULL;
+
+    assert(pyci_engine);
 
     gstate = PyGILState_Ensure();
 
     vmain = vdaily = sigs = 0;
 
-    if (pyci_root)
-    {
-        cl_free(pyci_root);
-        pyci_root = NULL;
-    }
+    settings = cl_engine_settings_copy(pyci_engine);
 
-    pyc_DEBUG(pyci_loadDB, "Loading db from %s\n", pyci_dbpath);
+    if(!settings)
+        fprintf(stderr, "Can't make a copy of the current engine settings\n");
 
-    if ((ret = cl_load(pyci_dbpath, &pyci_root, &sigs, CL_DB_STDOPT)))
+    pyci_freeDB();
+
+    pyc_DEBUG(loadDB(internal), "Loading db from %s\n", pyci_dbpath);
+
+    if (!(pyci_engine = cl_engine_new()))
     {
-        pyci_root = NULL;
-        pyc_DEBUG(pyci_loadDB, "cl_load() failed %s\n", cl_strerror(ret));
+        PyErr_SetString(PycError, "loadDB(internal): Can't initialize antivirus engine");
         goto cleanup;
     }
 
-    if ((ret = cl_build(pyci_root)))
+    if (settings)
     {
-        cl_free(pyci_root);
-        pyci_root = NULL;
-        pyc_DEBUG(pyci_loadDB, "cl_build() failed %s\n", cl_strerror(ret));
+        if ((ret = cl_engine_settings_apply(pyci_engine, settings)) != CL_SUCCESS)
+        {
+            fprintf(stderr, "Can't apply previous engine settings: %s\n", cl_strerror(ret));
+            fprintf(stderr, "Using default engine settings\n");
+        }
+    }
+
+    if ((ret = cl_load(pyci_dbpath, pyci_engine, &sigs, CL_DB_STDOPT)))
+    {
+        PyErr_PycFromClamav(loadDB(internal)::cl_load, ret);
+        pyci_freeDB();
         goto cleanup;
     }
+
+    if ((ret = cl_engine_compile(pyci_engine)))
+    {
+        PyErr_PycFromClamav(loadDB(internal)::cl_engine_compile, ret);
+        pyci_freeDB();
+        goto cleanup;
+    }
+
 
     ret = pyci_dbstatNew();
     pyci_lastcheck = time(NULL);
+
  cleanup:
+    if (settings)
+        cl_engine_settings_free(settings);
+
     PyGILState_Release(gstate);
     if (!ret) pyci_getVersions(&vmain, &vdaily);
     return ret;
@@ -263,7 +334,7 @@ static int pyci_dbstatNew(void)
     pyc_DEBUG(pyci_dbstatNew, "Calling cl_statinidir() on %s\n", pyci_dbpath);
     if ((ret = cl_statinidir(pyci_dbpath, pyci_dbstat)))
     {
-        pyc_DEBUG(pyci_dbstatNew, "cl_statinidir() failed %s\n", cl_strerror(ret));
+        PyErr_PycFromClamav(dbstatNew::cl_statinidir, ret);
         PyMem_Free(pyci_dbstat);
         return ret;
     }
@@ -273,8 +344,10 @@ static int pyci_dbstatNew(void)
 static int pyci_checkAndLoadDB(int force)
 {
     int ret;
+    assert(pyci_engine);
 
-    if (!pyci_root) return pyci_loadDB();
+    if (!pyci_isCompiled)
+        return pyci_loadDB();
 
     if (!force)
     {
@@ -288,7 +361,7 @@ static int pyci_checkAndLoadDB(int force)
         }
     }
 
-    pyc_DEBUG(pyci_checkAndLoadDB, "SelfCheck\n");
+    pyc_DEBUG(checkAndLoadDB, "SelfCheck\n");
 
     if (!pyci_dbstat && (ret = pyci_dbstatNew()))
         return ret;
@@ -304,7 +377,7 @@ static int pyci_checkAndLoadDB(int force)
             pyc_DEBUG(pyci_checkAndLoadDB, "virus db is up to date\n");
             return CL_SUCCESS;
         default:
-            pyc_DEBUG(pyci_checkAndLoadDB, "cl_statchkdir() failed %s\n", cl_strerror(ret));
+            PyErr_PycFromClamav(checkAndLoadDB::cl_statchkdir, ret);
             return ret;
     }
 
@@ -314,7 +387,7 @@ static int pyci_checkAndLoadDB(int force)
 static void pyci_cleanup(void)
 {
     if (pyci_dbstat) pyci_dbstatFree();
-    if (pyci_root) cl_free(pyci_root);
+    if (pyci_engine) cl_engine_free(pyci_engine);
 }
 
 /* Public */
@@ -331,11 +404,12 @@ static PyObject *pyc_checkAndLoadDB(PyObject *self, PyObject *args)
 
 static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 {
-    const char *version = NULL;
+    const char *version;
+    assert(pyci_engine);
 
-    if (!pyci_root)
+    if (!pyci_isCompiled)
     {
-        PyErr_SetString(PycError, "pyc_getVersions: No database loaded");
+        PyErr_SetString(PycError, "getVersions: No database loaded");
         return NULL;
     }
 
@@ -350,7 +424,7 @@ static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "s", &path))
     {
-        PyErr_SetString(PycError, "pyc_setDBPath: Database path must be a String");
+        PyErr_SetString(PycError, "setDBPath: Database path must be a String");
         return NULL;
     }
 
@@ -376,7 +450,7 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
 
     if (!PyArg_UnpackTuple(args, "loadDB", 0, 1, &result))
     {
-        PyErr_SetString(PycError, "pyc_loadDB: Invalid arguments");
+        PyErr_SetString(PycError, "loadDB: Invalid arguments");
         return NULL;
     }
 
@@ -386,14 +460,14 @@ static PyObject *pyc_loadDB(PyObject *self, PyObject *args)
             pyci_setDBPath(PyString_AsString(result));
         else
         {
-            PyErr_SetString(PyExc_TypeError, "pyc_loadDB: Database path must be a String");
+            PyErr_SetString(PyExc_TypeError, "loadDB: Database path must be a String");
             return NULL;
         }
     }
 
     if ((ret = pyci_checkAndLoadDB(1)))
     {
-        PyErr_PycFromClamav(pyc_loadDB, ret);
+        PyErr_PycFromClamav(loadDB, ret);
         return NULL;
     }
 
@@ -405,7 +479,7 @@ static PyObject *pyc_setDBTimer(PyObject *self, PyObject *args)
     int value = 0;
     if (!PyArg_ParseTuple(args, "i", &value))
     {
-        PyErr_SetString(PycError, "pyc_setDBTimer: Invalid arguments");
+        PyErr_SetString(PycError, "setDBTimer: Invalid arguments");
         return NULL;
     }
 
@@ -415,7 +489,7 @@ static PyObject *pyc_setDBTimer(PyObject *self, PyObject *args)
 
 static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
 {
-    if (pyci_root)
+    if (pyci_engine && pyci_isCompiled)
         Py_RETURN_TRUE;
     else
         Py_RETURN_FALSE;
@@ -425,25 +499,27 @@ static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
    the same used to compile libclamav */
 static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
 {
-    unsigned int ret = 0;
+    unsigned int ret;
     unsigned long scanned = 0;
     const char *virname = NULL;
     int fd = -1;
 
+    assert(pyci_engine);
+
     if (!PyArg_ParseTuple(args, "i", &fd) || (fd < 0))
     {
-        PyErr_SetString(PycError, "pyc_scanDesc: Invalid arguments");
+        PyErr_SetString(PycError, "scanDesc: Invalid arguments");
         return NULL;
     }
 
     if ((ret = pyci_checkAndLoadDB(0)))
     {
-        PyErr_PycFromClamav(pyc_scanDesc, ret);
+        PyErr_PycFromClamav(scanDesc, ret);
         return NULL;
     }
 
     Py_BEGIN_ALLOW_THREADS;
-    ret = cl_scandesc(fd, &virname, &scanned, pyci_root, &pyci_limits, pyci_options);
+    ret = cl_scandesc(fd, &virname, &scanned, pyci_engine, pyci_options);
     Py_END_ALLOW_THREADS;
 
     switch (ret)
@@ -452,7 +528,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
         case CL_VIRUS: return Py_BuildValue("(O,s)", Py_True,  virname);
     }
 
-    PyErr_PycFromClamav(pyc_ScanDesc, ret);
+    PyErr_PycFromClamav(ScanDesc, ret);
     return NULL;
 }
 
@@ -465,30 +541,30 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "s", &filename))
     {
-        PyErr_SetString(PyExc_TypeError, "pyc_scanFile: A string is needed for the filename");
+        PyErr_SetString(PyExc_TypeError, "scanFile: A string is needed for the filename");
         return NULL;
     }
 
 #ifdef _WIN32
     if (!(filename = cw_normalizepath(filename)))
-        PyErr_SetString(PycError, "pyc_scanFile: Path Normalization failed");
+        PyErr_SetString(PycError, "scanFile: Path Normalization failed");
 #endif
 
     if (lstat(filename, &info) < 0)
     {
-        PyErr_PycFromErrno(pyc_scanFile);
+        PyErr_PycFromErrno(scanFile);
         goto sf_cleanup;
     }
 
     if (!(S_ISREG(info.st_mode) || S_ISLNK(info.st_mode)))
     {
-        PyErr_SetString(PycError, "pyc_scanFile: Not a regular file");
+        PyErr_SetString(PycError, "scanFile: Not a regular file");
         goto sf_cleanup;
     }
 
     if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0)
     {
-        PyErr_PycFromErrno(pyc_scanFile);
+        PyErr_PycFromErrno(scanFile);
         goto sf_cleanup;
     }
 
@@ -508,90 +584,115 @@ static PyObject *pyc_setDebug(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-#define Opt(key) if (!strcmp(opt, #key)) pyci_limits.key = val
-static PyObject *pyc_setLimits(PyObject *self, PyObject *args)
+static PyObject *pyc_setEngineOption(PyObject *self, PyObject *args)
 {
-    PyObject *limits, *keyList, *item, *value, *result;
-    int listSize = 0, i;
-    char *opt = NULL;
-    uint32_t val = 0;
+    char *option;
+    PyObject *value;
+    int ret, i;
 
-    limits = keyList = item = value = result = NULL;
+    assert(pyci_engine);
 
-    if (!PyArg_ParseTuple(args, "O", &limits))
+    if (!PyArg_ParseTuple(args, "sO", &option, &value))
     {
-        PyErr_SetString(PyExc_TypeError, "pyc_setLimits: Invalid arguments");
+        PyErr_SetString(PyExc_TypeError, "setEngineOption: Invalid arguments");
         return NULL;
     }
 
-    if (!PyDict_Check(limits))
+    for (i = 0; engine_options[i].name; i++)
     {
-        PyErr_SetString(PyExc_TypeError, "pyc_setLimits: A Dictionary is needed to set limits");
-        return NULL;
-    }
+        if (strcmp(option, engine_options[i].name)) continue;
 
-    Py_INCREF(Py_None);
-    result = Py_None;
-
-    keyList = PyDict_Keys(limits);
-    listSize = PyList_Size(keyList);
-
-    gstate = PyGILState_Ensure();
-
-    for (i = 0; i < listSize; i++)
-    {
-        item = PyList_GetItem(keyList, i);
-        value = PyDict_GetItem(limits, item);
-
-        if (!(PyString_Check(item) && PyInt_Check(value)))
+        if (engine_options[i].readonly)
         {
-            PyErr_SetString(PyExc_TypeError, "pyc_setLimits: Invalid key pair while parsing limits (arguments should be String: Int)");
-            result = NULL;
-            break;
+            PyErr_SetString(PyExc_TypeError, "setEngineOption: The option is read-only");
+            return NULL;
         }
 
-        opt = PyString_AsString(item);
-        val = PyInt_AsLong(value);
-
-        Opt(maxscansize);
-        else Opt(maxfilesize);
-        else Opt(maxreclevel);
-        else Opt(maxfiles);
-        else Opt(archivememlim);
-        else
+        switch (engine_options[i].type)
         {
-            PyErr_SetString(PycError, "pyc_setLimits: Invalid option specified");
-            result = NULL;
-            break;
+            case OPT_NUM:
+            {
+                uint32_t val = PyInt_AsLong(value);
+                gstate = PyGILState_Ensure();
+                ret = cl_engine_set_num(pyci_engine, engine_options[i].id, val);
+                PyGILState_Release(gstate);
+                if (ret)
+                {
+                    PyErr_PycFromClamav(setEngineOption::cl_engine_set_num, ret);
+                    return NULL;
+                }
+                Py_RETURN_NONE;
+                break;
+            }
+            case OPT_STR:
+            {
+                char *val = PyString_AsString(value);
+                gstate = PyGILState_Ensure();
+                ret = cl_engine_set_str(pyci_engine, engine_options[i].id, val);
+                PyGILState_Release(gstate);
+                if (ret)
+                {
+                    PyErr_PycFromClamav(setEngineOption::cl_engine_set_str, ret);
+                    return NULL;
+                }
+                Py_RETURN_NONE;
+                break;
+            }
+            default:
+                PyErr_SetString(PyExc_TypeError, "setEngineOption: Internal Error");
         }
     }
-
-    PyGILState_Release(gstate);
-
-    if (result != Py_None) { Py_DECREF(Py_None); }
-    return result;
+    PyErr_SetString(PyExc_TypeError, "setEngineOption: Invalid option");
+    return NULL;
 }
 
-#define DictSetItem(key) PyDict_SetItem(limits, PyString_FromString(#key), PyInt_FromLong(pyci_limits.key))
-static PyObject *pyc_getLimits(PyObject *self, PyObject *args)
+static PyObject *pyc_getEngineOption(PyObject *self, PyObject *args)
 {
-    PyObject *limits = PyDict_New();
+    char *option;
+    int ret, i;
 
-    if (!limits)
+    if (!PyArg_ParseTuple(args, "s", &option))
     {
-        PyErr_SetString(PyExc_RuntimeError, "pyc_getLimits: Cannot allocate memory for the Dictionary");
+        PyErr_SetString(PyExc_TypeError, "setEngineOption: Invalid arguments");
         return NULL;
     }
 
-    DictSetItem(maxscansize);
-    DictSetItem(maxfilesize);
-    DictSetItem(maxreclevel);
-    DictSetItem(maxfiles);
-    DictSetItem(archivememlim);
-    return limits;
+    for (i = 0; engine_options[i].name; i++)
+    {
+        if (strcmp(option, engine_options[i].name)) continue;
+        switch (engine_options[i].type)
+        {
+            case OPT_NUM:
+            {
+                int64_t result = cl_engine_get_num(pyci_engine, engine_options[i].id, &ret);
+                if (result == -1)
+                {
+                    PyErr_PycFromClamav(getEngineOption::cl_engine_get_num, ret);
+                    return NULL;
+                }
+                return PyLong_FromLong(result);
+                break;
+            }
+            case OPT_STR:
+            {
+                const char *result = cl_engine_get_str(pyci_engine, engine_options[i].id, &ret);
+                if (!result)
+                {
+                    PyErr_PycFromClamav(getEngineOption::cl_engine_get_str, ret);
+                    return NULL;
+                }
+                return PyString_FromString(result);
+                break;
+            }
+            default:
+                PyErr_SetString(PyExc_TypeError, "getEngineOption: Internal Error");
+        }
+    }
+    PyErr_SetString(PyExc_TypeError, "getEngineOption: Invalid option");
+    return NULL;
 }
 
-static PyObject *pyc_setOption(PyObject *self, PyObject *args)
+static PyObject *pyc_setScanOption(PyObject *self, PyObject *args)
 {
     char *option = NULL;
     PyObject *value = NULL;
@@ -599,97 +700,53 @@ static PyObject *pyc_setOption(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "sO", &option, &value))
     {
-        PyErr_SetString(PyExc_TypeError, "pyc_setOption: Invalid arguments");
+        PyErr_SetString(PyExc_TypeError, "pyc_setScanOption: Invalid arguments");
         return NULL;
     }
 
     if (!PyBool_Check(value))
     {
-        PyErr_SetString(PyExc_TypeError, "pyc_setOption: A Boolean is needed as option value");
+        PyErr_SetString(PyExc_TypeError, "pyc_setScanOption: A Boolean is needed as option value");
         return NULL;
     }
 
-    gstate = PyGILState_Ensure();
 
-    for (i = 0; optlist[i].name; i++)
+    for (i = 0; scan_options[i].name; i++)
     {
-        if (strcmp(option, optlist[i].name)) continue;
+        if (strcmp(option, scan_options[i].name)) continue;
+
+        gstate = PyGILState_Ensure();
 
         if (PyObject_IsTrue(value))
-            pyci_options |= optlist[i].value;
+            pyci_options |= scan_options[i].id;
         else
-            pyci_options &= ~optlist[i].value;
+            pyci_options &= ~scan_options[i].id;
         break;
+
+        PyGILState_Release(gstate);
+        Py_RETURN_NONE;
     }
 
-    PyGILState_Release(gstate);
-
-    Py_RETURN_NONE;
+    PyErr_SetString(PyExc_TypeError, "setEngineOption: Invalid option");
+    return NULL;
 }
 
-static PyObject *pyc_getOptions(PyObject *self, PyObject *args)
+static PyObject *pyc_getScanOptions(PyObject *self, PyObject *args)
 {
     int i;
     PyObject *list = PyList_New(0);
 
     if (!list)
     {
-        PyErr_SetString(PyExc_RuntimeError, "pyc_getOptions: Cannot allocate memory for the List");
+        PyErr_SetString(PyExc_RuntimeError, "pyc_getScanOptions: Cannot allocate memory for the List");
         return NULL;
     }
 
-    for (i = 0; optlist[i].name; i++)
-        if (pyci_options & optlist[i].value)
-            PyList_Append(list, PyString_FromString(optlist[i].name));
+    for (i = 0; scan_options[i].name; i++)
+        if (pyci_options & scan_options[i].id)
+            PyList_Append(list, PyString_FromString(scan_options[i].name));
 
     return list;
-}
-
-static PyObject *pyc_setTempdir(PyObject *self, PyObject *args)
-{
-    PyObject *directory, *leavetemps;
-    char *dir = NULL;
-
-    if (!PyArg_ParseTuple(args, "OO", &directory, &leavetemps))
-    {
-        PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: Invalid arguments");
-        return NULL;
-    }
-
-    if ((directory != Py_None) && !PyString_Check(directory))
-    {
-        PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: Directory argument should be a String or None");
-        return NULL;
-    }
-
-    if (!PyBool_Check(leavetemps))
-    {
-        PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: A Boolean is needed for leave temps option");
-        return NULL;
-    }
-
-
-    if (directory != Py_None)
-    {
-        struct stat d;
-        dir = PyString_AsString(directory);
-
-        if (lstat(dir, &d) < 0)
-        {
-            PyErr_PycFromErrno(pyc_setTempdir);
-            return NULL;
-        }
-
-        if (!(S_ISDIR(d.st_mode)))
-        {
-            PyErr_SetString(PyExc_TypeError, "pyc_setTempdir: The path specified is not a directory");
-            return NULL;
-        }
-    }
-
-    cl_settempdir(dir, (PyObject_IsTrue(leavetemps) ? 1 : 0));
-
-    Py_RETURN_NONE;
 }
 
 #ifdef _WIN32
@@ -727,21 +784,28 @@ static PyObject *pyc_isWow64(PyObject *self, PyObject *args)
 /* Methods Table */
 static PyMethodDef pycMethods[] =
 {
-    { "getVersions",    pyc_getVersions,    METH_VARARGS, "Get clamav and database versions"        },
-    { "checkAndLoadDB", pyc_checkAndLoadDB, METH_VARARGS, "Reload virus database if changed"        },
-    { "setDBPath",      pyc_setDBPath,      METH_VARARGS, "Set path for virus database"             },
-    { "getDBPath",      pyc_getDBPath,      METH_VARARGS, "Get path for virus database"             },
-    { "loadDB",         pyc_loadDB,         METH_VARARGS|METH_KEYWORDS, "Load a virus database"     },
-    { "setDBTimer",     pyc_setDBTimer,     METH_VARARGS, "Set database check time"                 },
-    { "isLoaded",       pyc_isLoaded,       METH_VARARGS, "Check if db is loaded or not"            },
-    { "scanDesc",       pyc_scanDesc,       METH_VARARGS, "Scan a file descriptor"                  },
-    { "scanFile",       pyc_scanFile,       METH_VARARGS, "Scan a file"                             },
-    { "setDebug",       pyc_setDebug,       METH_VARARGS, "Enable libclamav debug messages"         },
-    { "setLimits",      pyc_setLimits,      METH_VARARGS, "Set engine limits"                       },
-    { "getLimits",      pyc_getLimits,      METH_VARARGS, "Get engine limits as a Dictionary"       },
-    { "setOption",      pyc_setOption,      METH_VARARGS, "Enable/Disable scanning options"         },
-    { "getOptions",     pyc_getOptions,     METH_VARARGS, "Get a list of enabled options"           },
-    { "setTempdir",     pyc_setTempdir,     METH_VARARGS, "Set temporary directory"                 },
+    { "getVersions",        pyc_getVersions,        METH_VARARGS, "Get clamav and database versions"        },
+    { "checkAndLoadDB",     pyc_checkAndLoadDB,     METH_VARARGS, "Reload virus database if changed"        },
+
+    { "setDBPath",          pyc_setDBPath,          METH_VARARGS, "Set path for virus database"             },
+    { "getDBPath",          pyc_getDBPath,          METH_VARARGS, "Get path for virus database"             },
+
+    { "loadDB",             pyc_loadDB,             METH_VARARGS|METH_KEYWORDS, "Load a virus database"     },
+    { "setDBTimer",         pyc_setDBTimer,         METH_VARARGS, "Set database check time"                 },
+
+    { "isLoaded",           pyc_isLoaded,           METH_VARARGS, "Check if db is loaded or not"            },
+
+    { "scanDesc",           pyc_scanDesc,           METH_VARARGS, "Scan a file descriptor"                  },
+    { "scanFile",           pyc_scanFile,           METH_VARARGS, "Scan a file"                             },
+
+    { "setDebug",           pyc_setDebug,           METH_VARARGS, "Enable libclamav debug messages"         },
+
+    { "setEngineOption",    pyc_setEngineOption,    METH_VARARGS, "Set an engine option"                    },
+    { "getEngineOption",    pyc_getEngineOption,    METH_VARARGS, "Get an engine option"                    },
+
+    { "setScanOption",      pyc_setScanOption,      METH_VARARGS, "Set a scan option"                       },
+    { "getScanOptions",     pyc_getScanOptions,     METH_VARARGS, "Get the list of scan options"            },
+
 #ifdef _WIN32
     { "fsRedirect",     pyc_fsRedirect,     METH_VARARGS, "Enable / Disable Win64 fs redirection"   },
     { "isWow64",        pyc_isWow64,        METH_VARARGS, "Check if we are running on wow"          },
@@ -752,6 +816,7 @@ static PyMethodDef pycMethods[] =
 PyMODINIT_FUNC
 initpyc(void)
 {
+    int ret;
     PyObject *m = Py_InitModule("pyc", pycMethods);
 
     PycError = PyErr_NewException("pyc.PycError", NULL, NULL);
@@ -761,28 +826,15 @@ initpyc(void)
     PyModule_AddIntConstant(m, "SELFCHECK_NEVER", PYC_SELFCHECK_NEVER);
     PyModule_AddIntConstant(m, "SELFCHECK_ALWAYS", PYC_SELFCHECK_ALWAYS);
 
+    /* argh no way to bail out from here? */
+    if ((ret = cl_init(CL_INIT_DEFAULT)))
+        fprintf(stderr, "Can't initialize libclamav: %s\n", cl_strerror(ret));
+
+    if (!(pyci_engine = cl_engine_new()))
+        fprintf(stderr, "Can't initialize antivirus engine");
+
     strncat(pyci_dbpath, cl_retdbdir(), MAX_PATH);
     pyci_dbpath[MAX_PATH] = 0;
 
-    /* set up archive limits */
-    pyci_limits.maxscansize   = 150 * (1 << 20);     /* 150 mb : during the scanning of archives this size will never be exceeded */
-    pyci_limits.maxfilesize   = 100 * (1 << 20);     /* 100 mb : compressed files will only be decompressed and scanned up to this size */
-    pyci_limits.maxreclevel   = 15;                  /* maximum recursion level for archives */
-    pyci_limits.maxfiles      = 10000;               /* maximum number of files to be scanned within a single archive */
-    pyci_limits.archivememlim = 0;                   /* limit memory usage for some unpackers */
-
     Py_AtExit(pyci_cleanup);
-}
-
-int main(int argc, char *argv[])
-{
-    /* Pass argv[0] to the Python interpreter */
-    Py_SetProgramName(argv[0]);
-
-    /* Initialize the Python interpreter.  Required. */
-    Py_Initialize();
-
-    /* Add a static module */
-    initpyc();
-    return 0;
 }
