@@ -198,7 +198,7 @@ static int pyci_getVersion(const char *name)
 {
     char path[MAX_PATH + 1];
     struct cl_cvd *cvd;
-    unsigned int dbver;
+    unsigned int dbver = 0;
 
     snprintf(path, MAX_PATH, "%s/%s.cvd", pyci_dbpath, name);
     path[MAX_PATH] = 0;
@@ -670,7 +670,7 @@ static PyObject *pyc_getEngineOption(PyObject *self, PyObject *args)
                     PyErr_PycFromClamav(getEngineOption::cl_engine_get_num, ret);
                     return NULL;
                 }
-                return PyLong_FromLong(result);
+                return PyLong_FromLongLong(result);
                 break;
             }
             case OPT_STR:
