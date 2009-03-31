@@ -192,6 +192,16 @@ static void pyci_dbstatFree(void);
 static void pyci_freeDB(void);
 
 #define pyci_isCompiled (cl_engine_get_num(pyci_engine, CL_ENGINE_DB_OPTIONS, NULL) & CL_DB_COMPILED)
+#define pyci_engineCheck(func) \
+    if (!(pyci_engine && pyci_isCompiled)) \
+    { \
+        PyErr_SetString(PycError, #func": No database loaded"); \
+        return NULL; \
+    }
+
+#define pyci_engineCheckReturn(ret) \
+    if (!(pyci_engine && pyci_isCompiled)) \
+        return ret;
 
 /* Private */
 static int pyci_getVersion(const char *name)
@@ -247,6 +257,9 @@ static void pyci_setDBPath(const char *path)
     if (pyci_dbstat)
         pyci_dbstatFree();
 
+    if (!(pyci_engine = cl_engine_new()))
+        fprintf(stderr, "Can't initialize antivirus engine");
+
     PyGILState_Release(gstate);
 }
 
@@ -255,20 +268,20 @@ static int pyci_loadDB(void)
     int ret = 0;
     struct cl_settings *settings = NULL;
 
-    assert(pyci_engine);
-
     gstate = PyGILState_Ensure();
 
-    vmain = vdaily = sigs = 0;
+    if (pyci_engine)
+    {
+        vmain = vdaily = sigs = 0;
+        settings = cl_engine_settings_copy(pyci_engine);
 
-    settings = cl_engine_settings_copy(pyci_engine);
+        if(!settings)
+            fprintf(stderr, "Can't make a copy of the current engine settings\n");
 
-    if(!settings)
-        fprintf(stderr, "Can't make a copy of the current engine settings\n");
+        pyci_freeDB();
 
-    pyci_freeDB();
-
-    pyc_DEBUG(loadDB(internal), "Loading db from %s\n", pyci_dbpath);
+        pyc_DEBUG(loadDB(internal), "Loading db from %s\n", pyci_dbpath);
+    }
 
     if (!(pyci_engine = cl_engine_new()))
     {
@@ -344,10 +357,8 @@ static int pyci_dbstatNew(void)
 static int pyci_checkAndLoadDB(int force)
 {
     int ret;
-    assert(pyci_engine);
 
-    if (!pyci_isCompiled)
-        return pyci_loadDB();
+    pyci_engineCheckReturn(pyci_loadDB());
 
     if (!force)
     {
@@ -405,14 +416,7 @@ static PyObject *pyc_checkAndLoadDB(PyObject *self, PyObject *args)
 static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
 {
     const char *version;
-    assert(pyci_engine);
-
-    if (!pyci_isCompiled)
-    {
-        PyErr_SetString(PycError, "getVersions: No database loaded");
-        return NULL;
-    }
-
+    pyci_engineCheck(getVersions);
     version = cl_retver();
     return Py_BuildValue("(s,i,i,i)", version, vmain, vdaily, sigs);
 }
@@ -489,7 +493,8 @@ static PyObject *pyc_setDBTimer(PyObject *self, PyObject *args)
 
 static PyObject *pyc_isLoaded(PyObject *self, PyObject *args)
 {
-    if (pyci_engine && pyci_isCompiled)
+    assert(pyci_engine);
+    if (pyci_isCompiled)
         Py_RETURN_TRUE;
     else
         Py_RETURN_FALSE;
@@ -504,7 +509,7 @@ static PyObject *pyc_scanDesc(PyObject *self, PyObject *args)
     const char *virname = NULL;
     int fd = -1;
 
-    assert(pyci_engine);
+    pyci_engineCheck(scanDesc);
 
     if (!PyArg_ParseTuple(args, "i", &fd) || (fd < 0))
     {
@@ -538,6 +543,8 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
     struct stat info;
     PyObject *result = NULL;
     int fd = -1;
+
+    pyci_engineCheck(scanFile);
 
     if (!PyArg_ParseTuple(args, "s", &filename))
     {
