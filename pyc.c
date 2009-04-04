@@ -1,7 +1,7 @@
 /*
  * Clamav Python Bindings
  *
- * Copyright (c) 2007-2008 Gianluigi Tiesi <sherpya@netfarm.it>
+ * Copyright (c) 2007-2009 Gianluigi Tiesi <sherpya@netfarm.it>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -554,7 +554,10 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
 
 #ifdef _WIN32
     if (!(filename = cw_normalizepath(filename)))
+    {
         PyErr_SetString(PycError, "scanFile: Path Normalization failed");
+        return NULL;
+    }
 #endif
 
     if (lstat(filename, &info) < 0)
@@ -576,9 +579,9 @@ static PyObject *pyc_scanFile(PyObject *self, PyObject *args)
     }
 
     result = pyc_scanDesc(self, Py_BuildValue("(i)", fd));
-    close(fd);
 
  sf_cleanup:
+    if (fd != -1) close(fd);
 #ifdef _WIN32
     if (filename) free(filename);
 #endif
