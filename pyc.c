@@ -626,7 +626,7 @@ static PyObject *pyc_setEngineOption(PyObject *self, PyObject *args)
                 gstate = PyGILState_Ensure();
                 ret = cl_engine_set_num(pyci_engine, engine_options[i].id, val);
                 PyGILState_Release(gstate);
-                if (ret)
+                if (ret != CL_SUCCESS)
                 {
                     PyErr_PycFromClamav(setEngineOption::cl_engine_set_num, ret);
                     return NULL;
@@ -640,7 +640,7 @@ static PyObject *pyc_setEngineOption(PyObject *self, PyObject *args)
                 gstate = PyGILState_Ensure();
                 ret = cl_engine_set_str(pyci_engine, engine_options[i].id, val);
                 PyGILState_Release(gstate);
-                if (ret)
+                if (ret != CL_SUCCESS)
                 {
                     PyErr_PycFromClamav(setEngineOption::cl_engine_set_str, ret);
                     return NULL;
@@ -675,7 +675,7 @@ static PyObject *pyc_getEngineOption(PyObject *self, PyObject *args)
             case OPT_NUM:
             {
                 int64_t result = cl_engine_get_num(pyci_engine, engine_options[i].id, &ret);
-                if (result == -1)
+                if (ret != CL_SUCCESS)
                 {
                     PyErr_PycFromClamav(getEngineOption::cl_engine_get_num, ret);
                     return NULL;
@@ -686,12 +686,12 @@ static PyObject *pyc_getEngineOption(PyObject *self, PyObject *args)
             case OPT_STR:
             {
                 const char *result = cl_engine_get_str(pyci_engine, engine_options[i].id, &ret);
-                if (!result)
+                if (ret != CL_SUCCESS)
                 {
                     PyErr_PycFromClamav(getEngineOption::cl_engine_get_str, ret);
                     return NULL;
                 }
-                return PyString_FromString(result);
+                return PyString_FromString(result ? result : "");
                 break;
             }
             default:
