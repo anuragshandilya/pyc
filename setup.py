@@ -18,7 +18,7 @@ if platform == 'win32':
     CLINCLUDE = ['/'.join([CLAMAVDEVROOT, 'libclamav'])]
     CLLIB = ['/'.join([CLAMAVDEVROOT, '', LIBFILE])]
 else:
-    CFLAGS = [ '-Wall', '-O2', '-g3' ]
+    CFLAGS = [ '-Wall', '-O0', '-g3' ]
     LDFLAGS = [ '-L/usr/local/lib' ]
     LIBS = [ 'clamav' ]
     CLINCLUDE = [ '/usr/local/include' ]
@@ -36,7 +36,7 @@ pyc = Extension('pyc',
 # Register : python setup.py register
 
 setup (name = 'pyc',
-       version = '1.1',
+       version = '2.0.95',
        author = 'Gianluigi Tiesi',
        author_email = 'sherpya@netfarm.it',
        license ='GPL',
