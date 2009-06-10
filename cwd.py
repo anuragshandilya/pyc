@@ -3,7 +3,7 @@
 #
 # Simple Clone of Clamd using pyc extension
 #
-# Copyright (C) 2008 Gianluigi Tiesi <sherpya@netfarm.it>
+# Copyright (C) 2008-2009 Gianluigi Tiesi <sherpya@netfarm.it>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
@@ -149,7 +149,7 @@ class CwdHandler(async_chat):
             stream.close()
             return
 
-        f, filename = mkstemp(dir=self.server.config['TemporaryDirectory'])
+        f, filename = mkstemp()
         start = time()
         ok = True
         bytes = 0
@@ -261,7 +261,7 @@ class CwConfig:
         'MaxRecursion'              : [ 'engine', 'max-recursion', int, 16 ],
         'MaxFiles'                  : [ 'engine', 'max-files', int, 15000 ],
         #'TemporaryDirectory'        : [ 'engine', 'tempdir', qstr, None ],
-        'LeaveTemporaryFiles'       : [ 'engine', 'leave-temps', boolean, ],
+        'LeaveTemporaryFiles'       : [ 'engine', 'leave-temps', boolean, False ],
 
         'ScanPE'                    : [ 'scan', 'pe', boolean, True ],
         'ScanELF'                   : [ 'scan', 'elf', boolean, True ],
@@ -292,7 +292,6 @@ class CwConfig:
             if owner == 'engine':
                 pyc.setEngineOption(name, value)
             elif owner == 'scan':
-                print 'scanopt', name, value
                 pyc.setScanOption(name, value)
 
     def load(self, filename):
