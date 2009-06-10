@@ -285,13 +285,17 @@ class CwConfig:
     def engage(self):
         if self['DatabaseDirectory'] is not None:
             pyc.setDBPath(self['DatabaseDirectory'])
+        if self['Debug']:
+            pyc.setDebug()
         pyc.setDBTimer(self['SelfCheck'])
 
         for option in self.options.keys():
             (owner, name, _, value) = self.options[option]
             if owner == 'engine':
+                print 'Setting engine', name, value
                 pyc.setEngineOption(name, value)
             elif owner == 'scan':
+                print 'Setting scan', name, value
                 pyc.setScanOption(name, value)
 
     def load(self, filename):
