@@ -632,7 +632,6 @@ static PyObject *pyc_setEngineOption(PyObject *self, PyObject *args)
                     return NULL;
                 }
                 Py_RETURN_NONE;
-                break;
             }
             case OPT_STR:
             {
@@ -646,7 +645,6 @@ static PyObject *pyc_setEngineOption(PyObject *self, PyObject *args)
                     return NULL;
                 }
                 Py_RETURN_NONE;
-                break;
             }
             default:
                 PyErr_SetString(PyExc_TypeError, "setEngineOption: Internal Error");
@@ -681,7 +679,6 @@ static PyObject *pyc_getEngineOption(PyObject *self, PyObject *args)
                     return NULL;
                 }
                 return PyLong_FromLongLong(result);
-                break;
             }
             case OPT_STR:
             {
@@ -692,7 +689,6 @@ static PyObject *pyc_getEngineOption(PyObject *self, PyObject *args)
                     return NULL;
                 }
                 return PyString_FromString(result ? result : "");
-                break;
             }
             default:
                 PyErr_SetString(PyExc_TypeError, "getEngineOption: Internal Error");
@@ -731,7 +727,6 @@ static PyObject *pyc_setScanOption(PyObject *self, PyObject *args)
             pyci_options |= scan_options[i].id;
         else
             pyci_options &= ~scan_options[i].id;
-        break;
 
         PyGILState_Release(gstate);
         Py_RETURN_NONE;
