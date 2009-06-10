@@ -35,12 +35,21 @@ if __name__ == '__main__':
     f.write('SCAN ' + filename + '\n')
     print f.readline().strip()
 
-    f.write('STREAM')
+    f.write('STREAM\n')
     port = int(f.readline().strip().split('PORT ', 1).pop())
     s = socket(AF_INET, SOCK_STREAM)
     s.connect(('localhost', port))
     s.send(EICAR)
     s.close()
     print f.readline().strip()
+
+    f.write('STREAM\n')
+    port = int(f.readline().strip().split('PORT ', 1).pop())
+    s = socket(AF_INET, SOCK_STREAM)
+    s.connect(('localhost', port))
+    s.send(open('clam.exe', 'rb').read())
+    s.close()
+    print f.readline().strip()
+
     f.write('END\n')
     f.close()
