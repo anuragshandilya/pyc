@@ -2,9 +2,7 @@
 
 setlocal
 
-set CLAMAV_DEVROOT=C:\Work\Clamav\clamav-devel
-set DISTUTILS_USE_SDK=1
-set MSSdk=.
+set CLAMAV_DEVROOT=C:\Work\Clamav\clamav-release
 
 if "%1"=="release" goto release
 if "%1"=="debug" goto debug

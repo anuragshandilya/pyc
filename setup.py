@@ -7,6 +7,8 @@ if platform == 'win32':
     CFLAGS = [] #[ '/Zi' ]
     LDFLAGS = [] #[ '/PDB:pyd.pdb' ]
     LIBS = []
+    environ['DISTUTILS_USE_SDK'] = '1'
+    environ['MSSdk'] = '.'
     CLAMAVDEVROOT = environ.get('CLAMAV_DEVROOT')
     DEBUG = environ.get('CLAMAV_DEBUG', None)
     if DEBUG is not None:
