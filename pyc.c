@@ -1,7 +1,7 @@
 /*
  * Clamav Python Bindings
  *
- * Copyright (c) 2007-2009 Gianluigi Tiesi <sherpya@netfarm.it>
+ * Copyright (c) 2007-2010 Gianluigi Tiesi <sherpya@netfarm.it>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -43,8 +43,9 @@
 /* Get some help from clamav win32 specific functions */
 extern char *cw_normalizepath(const char *path);
 extern int cw_stat(const char *path, struct stat *buf);
-extern BOOL cw_fsredirection(BOOL value);
 extern BOOL cw_iswow64(void);
+extern BOOL cw_disablefsredir(void);
+extern BOOL cw_revertfsredir(void);
 #define lstat stat
 #define stat(p, b) cw_stat(p, b)
 #else
@@ -111,7 +112,7 @@ void pyc_DEBUG(void *func, const char *fmt, ...) {}
 #endif
 #endif
 
-#define PYC_VERSION "Python ClamAV version 2.0.95"
+#define PYC_VERSION "Python ClamAV version 2.0.96.3"
 
 #define PYC_SELFCHECK_NEVER     0
 #define PYC_SELFCHECK_ALWAYS   -1
@@ -755,23 +756,17 @@ static PyObject *pyc_getScanOptions(PyObject *self, PyObject *args)
 }
 
 #ifdef _WIN32
-static PyObject *pyc_fsRedirect(PyObject *self, PyObject *args)
+static PyObject *pyc_disableFsRedir(PyObject *self, PyObject *args)
 {
-    PyObject *value = NULL;
+    if (cw_disablefsredir())
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
 
-    if (!PyArg_ParseTuple(args, "O", &value))
-    {
-        PyErr_SetString(PyExc_TypeError, "pyc_fsRedirect: Invalid arguments");
-        return NULL;
-    }
-
-    if (!PyBool_Check(value))
-    {
-        PyErr_SetString(PyExc_TypeError, "pyc_fsRedirect: A Boolean is needed to set fs redirection");
-        return NULL;
-    }
-
-    if (cw_fsredirection((PyObject_IsTrue(value) ? TRUE : FALSE)))
+static PyObject *pyc_revertFsRedir(PyObject *self, PyObject *args)
+{
+    if (cw_revertfsredir())
         Py_RETURN_TRUE;
     else
         Py_RETURN_FALSE;
@@ -789,31 +784,32 @@ static PyObject *pyc_isWow64(PyObject *self, PyObject *args)
 /* Methods Table */
 static PyMethodDef pycMethods[] =
 {
-    { "getVersions",        pyc_getVersions,        METH_VARARGS, "Get clamav and database versions"        },
-    { "checkAndLoadDB",     pyc_checkAndLoadDB,     METH_VARARGS, "Reload virus database if changed"        },
+    { "getVersions",        pyc_getVersions,        METH_NOARGS,  "Get clamav and database versions"        },
+    { "checkAndLoadDB",     pyc_checkAndLoadDB,     METH_NOARGS,  "Reload virus database if changed"        },
 
     { "setDBPath",          pyc_setDBPath,          METH_VARARGS, "Set path for virus database"             },
-    { "getDBPath",          pyc_getDBPath,          METH_VARARGS, "Get path for virus database"             },
+    { "getDBPath",          pyc_getDBPath,          METH_NOARGS, "Get path for virus database"             },
 
     { "loadDB",             pyc_loadDB,             METH_VARARGS|METH_KEYWORDS, "Load a virus database"     },
     { "setDBTimer",         pyc_setDBTimer,         METH_VARARGS, "Set database check time"                 },
 
-    { "isLoaded",           pyc_isLoaded,           METH_VARARGS, "Check if db is loaded or not"            },
+    { "isLoaded",           pyc_isLoaded,           METH_NOARGS,  "Check if db is loaded or not"            },
 
     { "scanDesc",           pyc_scanDesc,           METH_VARARGS, "Scan a file descriptor"                  },
     { "scanFile",           pyc_scanFile,           METH_VARARGS, "Scan a file"                             },
 
-    { "setDebug",           pyc_setDebug,           METH_VARARGS, "Enable libclamav debug messages"         },
+    { "setDebug",           pyc_setDebug,           METH_NOARGS,  "Enable libclamav debug messages"         },
 
     { "setEngineOption",    pyc_setEngineOption,    METH_VARARGS, "Set an engine option"                    },
     { "getEngineOption",    pyc_getEngineOption,    METH_VARARGS, "Get an engine option"                    },
 
     { "setScanOption",      pyc_setScanOption,      METH_VARARGS, "Set a scan option"                       },
-    { "getScanOptions",     pyc_getScanOptions,     METH_VARARGS, "Get the list of scan options"            },
+    { "getScanOptions",     pyc_getScanOptions,     METH_NOARGS,  "Get the list of scan options"            },
 
 #ifdef _WIN32
-    { "fsRedirect",     pyc_fsRedirect,     METH_VARARGS, "Enable / Disable Win64 fs redirection"   },
-    { "isWow64",        pyc_isWow64,        METH_VARARGS, "Check if we are running on wow"          },
+    { "disableFsRedir",     pyc_disableFsRedir,     METH_NOARGS,  "Disable Win64 fs redirection"            },
+    { "revertFsRedir",      pyc_revertFsRedir,      METH_NOARGS,  "Revert (Enable) Win64 fs redirection"    },
+    { "isWow64",            pyc_isWow64,            METH_NOARGS,  "Check if we are running on wow"          },
 #endif
     { NULL, NULL, 0, NULL }
 };
