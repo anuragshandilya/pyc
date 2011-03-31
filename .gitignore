@@ -1,0 +1,9 @@
+build
+*~
+*.pyc
+*.pyd
+*.dll
+*.URL
+*.conf
+*.manifest
+
