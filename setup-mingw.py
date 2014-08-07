@@ -20,6 +20,8 @@ pyc = Extension('pyc',
 # Install : python setup.py install
 # Register : python setup.py register
 
+# python setup-mingw.py build --compiler=mingw32
+
 setup (name = 'pyc',
        version = '0.98.4',
        author = 'Gianluigi Tiesi',
