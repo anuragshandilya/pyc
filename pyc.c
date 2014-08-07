@@ -186,7 +186,7 @@ static const scan_options_t scan_options[] =
 };
 
 static unsigned int sigs = 0;
-static unsigned int vmain = 0, vdaily = 0;
+static unsigned int vmain = 0, vdaily = 0, vbytecode = 0;
 static char pyci_dbpath[MAX_PATH + 1] = "";
 static time_t pyci_lastcheck = 0;
 static time_t pyci_checktimer = PYC_SELFCHECK_NEVER;
@@ -241,11 +241,12 @@ static int pyci_getVersion(const char *name)
     return dbver;
 }
 
-static void pyci_getVersions(unsigned int *main, unsigned int *daily)
+static void pyci_getVersions(unsigned int *main, unsigned int *daily, unsigned int *bytecode)
 {
     gstate = PyGILState_Ensure();
     *main = pyci_getVersion("main");
     *daily = pyci_getVersion("daily");
+    *bytecode = pyci_getVersion("bytecode");
     PyGILState_Release(gstate);
 }
 
@@ -283,7 +284,7 @@ static int pyci_loadDB(void)
 
     if (pyci_engine)
     {
-        vmain = vdaily = sigs = 0;
+        vmain = vdaily = vbytecode = sigs = 0;
         settings = cl_engine_settings_copy(pyci_engine);
 
         if(!settings)
@@ -332,7 +333,7 @@ static int pyci_loadDB(void)
         cl_engine_settings_free(settings);
 
     PyGILState_Release(gstate);
-    if (!ret) pyci_getVersions(&vmain, &vdaily);
+    if (!ret) pyci_getVersions(&vmain, &vdaily, &vbytecode);
     return ret;
 }
 
@@ -429,7 +430,7 @@ static PyObject *pyc_getVersions(PyObject *self, PyObject *args)
     const char *version;
     pyci_engineCheck(getVersions);
     version = cl_retver();
-    return Py_BuildValue("(s,i,i,i)", version, vmain, vdaily, sigs);
+    return Py_BuildValue("(s,i,i,i,i)", version, vmain, vdaily, vbytecode, sigs);
 }
 
 static PyObject *pyc_setDBPath(PyObject *self, PyObject *args)
