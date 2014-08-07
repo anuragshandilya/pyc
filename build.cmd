@@ -2,7 +2,8 @@
 
 setlocal
 
-set CLAMAV_DEVROOT=C:\Work\Clamav\clamav-release
+set PATH=C:\Python23;%PATH%
+set CLAMAV_DEVROOT=C:\Work\Clamav\clamav-0.98
 
 if "%1"=="release" goto release
 if "%1"=="debug" goto debug

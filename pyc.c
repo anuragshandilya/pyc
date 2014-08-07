@@ -1,7 +1,7 @@
 /*
  * Clamav Python Bindings
  *
- * Copyright (c) 2007-2010 Gianluigi Tiesi <sherpya@netfarm.it>
+ * Copyright (c) 2007-2014 Gianluigi Tiesi <sherpya@netfarm.it>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -19,6 +19,10 @@
  */
 
 /* #define PYC_DEBUG */
+
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include <Python.h>
 #include <clamav.h>
@@ -61,9 +65,15 @@ typedef unsigned __int16 uint16_t;
 typedef signed   __int16 int16_t;
 typedef unsigned __int8  uint8_t;
 typedef signed   __int8  int8_t;
+#define open _open
+#define close _close
+#define access _access
 #else
 #include <inttypes.h>
 #endif
+
+/* crypto.h depends on openssh includes */
+extern int cl_initialize_crypto(void);
 
 #ifndef MAX_PATH
 #define MAX_PATH 260
@@ -112,7 +122,7 @@ void pyc_DEBUG(void *func, const char *fmt, ...) {}
 #endif
 #endif
 
-#define PYC_VERSION "Python ClamAV version 2.0.96.3"
+#define PYC_VERSION "Python ClamAV version 0.98.4"
 
 #define PYC_SELFCHECK_NEVER     0
 #define PYC_SELFCHECK_ALWAYS   -1
@@ -826,6 +836,8 @@ initpyc(void)
     PyModule_AddStringConstant(m, "__version__", PYC_VERSION);
     PyModule_AddIntConstant(m, "SELFCHECK_NEVER", PYC_SELFCHECK_NEVER);
     PyModule_AddIntConstant(m, "SELFCHECK_ALWAYS", PYC_SELFCHECK_ALWAYS);
+
+    cl_initialize_crypto();
 
     /* argh no way to bail out from here? */
     if ((ret = cl_init(CL_INIT_DEFAULT)))

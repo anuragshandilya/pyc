@@ -21,7 +21,7 @@ pyc = Extension('pyc',
 # Register : python setup.py register
 
 setup (name = 'pyc',
-       version = '2.0.95',
+       version = '0.98.4',
        author = 'Gianluigi Tiesi',
        author_email = 'sherpya@netfarm.it',
        license ='GPL',
