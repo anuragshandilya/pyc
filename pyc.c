@@ -72,9 +72,6 @@ typedef signed   __int8  int8_t;
 #include <inttypes.h>
 #endif
 
-/* crypto.h depends on openssh includes */
-extern int cl_initialize_crypto(void);
-
 #ifndef MAX_PATH
 #define MAX_PATH 260
 #endif
@@ -837,8 +834,6 @@ initpyc(void)
     PyModule_AddStringConstant(m, "__version__", PYC_VERSION);
     PyModule_AddIntConstant(m, "SELFCHECK_NEVER", PYC_SELFCHECK_NEVER);
     PyModule_AddIntConstant(m, "SELFCHECK_ALWAYS", PYC_SELFCHECK_ALWAYS);
-
-    cl_initialize_crypto();
 
     /* argh no way to bail out from here? */
     if ((ret = cl_init(CL_INIT_DEFAULT)))
